@@ -1,0 +1,23 @@
+{
+  "name": "Luckymate",
+  "short_name": "Luckymate",
+  "description": "Bet on live football matches, play Aviator & Crash games, and invite friends to earn $3 USD on Luckymate.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#121821",
+  "theme_color": "#121821",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/luckymate-og.png?v=3",
+      "sizes": "1200x630",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}

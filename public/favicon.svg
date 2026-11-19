@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+  <rect width="128" height="128" rx="26" fill="#121821" />
+  <rect x="3" y="3" width="122" height="122" rx="23" fill="none" stroke="#28374b" stroke-width="2" />
+  <text
+    x="64"
+    y="62"
+    text-anchor="middle"
+    font-family="Outfit, Arial, sans-serif"
+    font-size="23"
+    font-weight="900"
+    font-style="italic"
+    letter-spacing="-0.5"
+  >
+    <tspan fill="#f5c417">Lucky</tspan><tspan fill="#ffffff">mate</tspan>
+  </text>
+  <rect x="32" y="76" width="64" height="5" rx="2.5" fill="#7bc114" />
+</svg>

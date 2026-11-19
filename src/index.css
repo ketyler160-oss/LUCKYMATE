@@ -1,0 +1,397 @@
+@import "tailwindcss";
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  --font-display: "Outfit", system-ui, sans-serif;
+  --font-sans: "Plus Jakarta Sans", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+}
+
+@layer base {
+  :root {
+    --lm-bg: #121821;
+    --lm-surface: #19222e;
+    --lm-surface-border: #263344;
+    --lm-text: #f1f5f9;
+    --lm-muted: #94a3b8;
+  }
+
+  html.lm-light {
+    --lm-bg: #e2e8f0;
+    --lm-surface: #19222e;
+    --lm-surface-border: #263344;
+    --lm-text: #0f172a;
+    --lm-muted: #475569;
+  }
+
+  html {
+    scroll-behavior: smooth;
+    background-color: var(--lm-bg);
+    color: var(--lm-text);
+    font-family: var(--font-sans);
+  }
+
+  body {
+    margin: 0;
+    background-color: var(--lm-bg);
+    color: var(--lm-text);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  h1, h2, h3, .font-display {
+    font-family: var(--font-display);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    html {
+      scroll-behavior: auto;
+    }
+  }
+}
+
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+}
+
+.no-scrollbar {
+  scrollbar-width: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+.lm-card {
+  background-color: var(--lm-surface);
+  border: 1px solid var(--lm-surface-border);
+}
+
+html.lm-light .lm-surface-shell {
+  background-color: #eef2f6;
+  color: #0f172a;
+}
+
+html.lm-light .lm-drawer {
+  background-color: #f1f5f9;
+  border-color: #cbd5e1;
+  color: #0f172a;
+}
+
+html.lm-light .lm-drawer-card {
+  background-color: #ffffff;
+  border-color: #cbd5e1;
+}
+
+html.lm-light .lm-drawer-title {
+  color: #0f172a;
+}
+
+html.lm-light .lm-drawer-row {
+  color: #1e293b;
+}
+
+html.lm-light .lm-drawer-row:hover {
+  background-color: #e2e8f0;
+  color: #0f172a;
+}
+
+html.lm-light .lm-drawer-row span:first-child {
+  color: #334155;
+}
+
+html.lm-data-saver .lm-kenburns,
+html.lm-data-saver .lm-marquee-track,
+html.lm-data-saver .lm-slide-progress,
+html.lm-data-saver .lm-shimmer-sweep::after {
+  animation: none !important;
+}
+
+@keyframes lmFadeUp {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes lmModalPop {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes lmShimmerSweep {
+  0% {
+    transform: translateX(-140%) skewX(-18deg);
+  }
+  45%, 100% {
+    transform: translateX(240%) skewX(-18deg);
+  }
+}
+
+@keyframes lmFloatGentle {
+  0%, 100% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(-5px);
+  }
+}
+
+@keyframes lmTurbulenceFloat {
+  0%, 100% {
+    transform: translateY(0px) rotate(0deg);
+  }
+  30% {
+    transform: translateY(-3px) rotate(-1.4deg);
+  }
+  70% {
+    transform: translateY(2.5px) rotate(1.1deg);
+  }
+}
+
+@keyframes lmFlameFlicker {
+  0%, 100% {
+    transform: scaleX(1) scaleY(1);
+    opacity: 0.94;
+  }
+  25% {
+    transform: scaleX(1.16) scaleY(0.88);
+    opacity: 1;
+  }
+  55% {
+    transform: scaleX(0.86) scaleY(1.1);
+    opacity: 0.82;
+  }
+  80% {
+    transform: scaleX(1.08) scaleY(0.94);
+    opacity: 0.98;
+  }
+}
+
+@keyframes lmPropellerSpin {
+  0% {
+    transform: scaleY(1);
+    opacity: 0.9;
+  }
+  50% {
+    transform: scaleY(0.28);
+    opacity: 0.45;
+  }
+  100% {
+    transform: scaleY(1);
+    opacity: 0.9;
+  }
+}
+
+@keyframes lmWheelSpin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes lmCrashShake {
+  0% { transform: translate3d(0, 0, 0); }
+  15% { transform: translate3d(-6px, 4px, 0) rotate(-0.8deg); }
+  30% { transform: translate3d(6px, -4px, 0) rotate(0.8deg); }
+  45% { transform: translate3d(-5px, -3px, 0) rotate(-0.5deg); }
+  60% { transform: translate3d(4px, 3px, 0) rotate(0.4deg); }
+  75% { transform: translate3d(-2px, 1px, 0); }
+  100% { transform: translate3d(0, 0, 0); }
+}
+
+@keyframes lmShockwave {
+  0% {
+    transform: scale(0.3);
+    opacity: 0.95;
+  }
+  100% {
+    transform: scale(2.4);
+    opacity: 0;
+  }
+}
+
+@keyframes lmCloudDrift {
+  0% {
+    transform: translateX(0px);
+  }
+  100% {
+    transform: translateX(-180px);
+  }
+}
+
+@keyframes lmWaveScroll {
+  0% {
+    transform: translateX(0px);
+  }
+  100% {
+    transform: translateX(-60px);
+  }
+}
+
+@keyframes lmSparkPulse {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 0.72;
+  }
+  50% {
+    transform: scale(1.16);
+    opacity: 1;
+  }
+}
+
+.lm-fade-up {
+  animation: lmFadeUp 0.34s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.lm-modal-pop {
+  animation: lmModalPop 0.24s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.lm-shimmer-sweep {
+  position: relative;
+  overflow: hidden;
+}
+.lm-shimmer-sweep::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  width: 45%;
+  pointer-events: none;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.24) 50%,
+    transparent 100%
+  );
+  animation: lmShimmerSweep 4.8s ease-in-out infinite;
+}
+
+.lm-float-gentle {
+  animation: lmFloatGentle 3.4s ease-in-out infinite;
+}
+
+.lm-turbulence-float {
+  animation: lmTurbulenceFloat 1.9s ease-in-out infinite;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+.lm-flame-flicker {
+  animation: lmFlameFlicker 0.14s ease-in-out infinite;
+  transform-box: fill-box;
+  transform-origin: right center;
+}
+
+.lm-propeller-spin {
+  animation: lmPropellerSpin 0.08s linear infinite;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+.lm-wheel-spin {
+  animation: lmWheelSpin 14s linear infinite;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+.lm-crash-shake {
+  animation: lmCrashShake 0.48s cubic-bezier(0.36, 0.07, 0.19, 0.97) both;
+}
+
+.lm-shockwave {
+  animation: lmShockwave 0.95s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+.lm-cloud-drift {
+  animation: lmCloudDrift 8s linear infinite;
+}
+
+.lm-wave-scroll {
+  animation: lmWaveScroll 3.2s linear infinite;
+}
+
+.lm-spark-pulse {
+  animation: lmSparkPulse 1.8s ease-in-out infinite;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+@keyframes lmKenBurns {
+  0% {
+    transform: scale(1) translate3d(0, 0, 0);
+  }
+  100% {
+    transform: scale(1.075) translate3d(-1.2%, -0.8%, 0);
+  }
+}
+
+@keyframes lmMarqueeScroll {
+  0% {
+    transform: translate3d(0, 0, 0);
+  }
+  100% {
+    transform: translate3d(-50%, 0, 0);
+  }
+}
+
+@keyframes lmSlideProgress {
+  0% {
+    transform: scaleX(0);
+  }
+  100% {
+    transform: scaleX(1);
+  }
+}
+
+.lm-kenburns {
+  animation: lmKenBurns 5.2s ease-out forwards;
+  will-change: transform;
+}
+
+.lm-marquee-track {
+  display: flex;
+  width: max-content;
+  animation: lmMarqueeScroll 34s linear infinite;
+  will-change: transform;
+}
+
+.lm-slide-progress {
+  transform-origin: left center;
+  animation: lmSlideProgress 4.2s linear forwards;
+  will-change: transform;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lm-fade-up,
+  .lm-modal-pop,
+  .lm-shimmer-sweep::after,
+  .lm-float-gentle,
+  .lm-turbulence-float,
+  .lm-flame-flicker,
+  .lm-propeller-spin,
+  .lm-wheel-spin,
+  .lm-crash-shake,
+  .lm-shockwave,
+  .lm-cloud-drift,
+  .lm-wave-scroll,
+  .lm-spark-pulse,
+  .lm-kenburns,
+  .lm-marquee-track,
+  .lm-slide-progress {
+    animation: none !important;
+  }
+}
