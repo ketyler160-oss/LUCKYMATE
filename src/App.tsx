@@ -10,7 +10,6 @@ import { GamesHubView } from './components/GamesHubView';
 import { LandingSplash } from './components/LandingSplash';
 import { LiveScoreView } from './components/LiveScoreView';
 import { MatchMarketsModal } from './components/MatchMarketsModal';
-import { PredictorView } from './components/PredictorView';
 import { ProfileView } from './components/ProfileView';
 import { ReferralProgramCard } from './components/ReferralProgramCard';
 import {
@@ -118,16 +117,6 @@ export default function App() {
   const [marketsMatch, setMarketsMatch] = useState<MatchItem | null>(null);
   const [aiSelectedMatch, setAiSelectedMatch] = useState<MatchItem | null>(null);
   const [liveMatchesCount, setLiveMatchesCount] = useState<number>(0);
-  const [predictorOpen, setPredictorOpen] = useState<boolean>(() => {
-    try {
-      const path = window.location.pathname.toLowerCase();
-      const hash = window.location.hash.toLowerCase();
-      const params = new URLSearchParams(window.location.search);
-      return path === '/predictor' || hash === '#/predictor' || params.has('predictor');
-    } catch {
-      return false;
-    }
-  });
   const [walletSubTab, setWalletSubTab] = useState<'deposit' | 'withdraw'>('deposit');
   const [walletReturnNotice, setWalletReturnNotice] = useState<{
     ok: boolean;
@@ -475,30 +464,6 @@ export default function App() {
     };
   }, []);
 
-  useEffect(() => {
-    const onKeyDown = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.altKey) && e.shiftKey && e.key.toLowerCase() === 'p') {
-        e.preventDefault();
-        setPredictorOpen((prev) => !prev);
-      }
-    };
-    const onHashOrPop = () => {
-      const path = window.location.pathname.toLowerCase();
-      const hash = window.location.hash.toLowerCase();
-      if (path === '/predictor' || hash === '#/predictor') {
-        setPredictorOpen(true);
-      }
-    };
-    window.addEventListener('keydown', onKeyDown);
-    window.addEventListener('hashchange', onHashOrPop);
-    window.addEventListener('popstate', onHashOrPop);
-    return () => {
-      window.removeEventListener('keydown', onKeyDown);
-      window.removeEventListener('hashchange', onHashOrPop);
-      window.removeEventListener('popstate', onHashOrPop);
-    };
-  }, []);
-
   const enterCrashGame = useCallback((gameId: CrashGameId) => {
     setActiveCrashGameId(gameId);
     setTopCategory('crash');
@@ -802,7 +767,6 @@ export default function App() {
             setTopCategory('sports');
             setActiveCrashGameId(null);
           }}
-          onSecretLogoUnlock={() => setPredictorOpen(true)}
         />
       )}
 
@@ -1412,30 +1376,6 @@ export default function App() {
             />
           </div>
         </div>
-      )}
-
-      {predictorOpen && (
-        <PredictorView
-          initialGameId={activeCrashGameId ?? 'aviator'}
-          onClose={() => {
-            setPredictorOpen(false);
-            try {
-              const url = new URL(window.location.href);
-              if (url.pathname.toLowerCase() === '/predictor') {
-                url.pathname = '/';
-              }
-              if (url.hash.toLowerCase() === '#/predictor') {
-                url.hash = '';
-              }
-              if (url.searchParams.has('predictor')) {
-                url.searchParams.delete('predictor');
-              }
-              window.history.replaceState(null, '', url.pathname + url.search + url.hash);
-            } catch {
-              // Ignore history errors
-            }
-          }}
-        />
       )}
     </div>
   );

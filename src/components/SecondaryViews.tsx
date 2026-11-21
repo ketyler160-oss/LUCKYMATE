@@ -27,6 +27,8 @@ import {
   COUNTRY_ORDER,
   MIN_DEPOSIT_USD,
   MIN_WITHDRAW_USD,
+  WITHDRAW_FEE_TIERS,
+  calculateWithdrawFeeUsd,
   convertUsdToLocal,
   formatDirectLocalMoney,
   formatMoney,
@@ -631,6 +633,52 @@ export function WalletActionView({
               USD
             </span>
           </div>
+
+          {!isDeposit && (() => {
+            const parsedPreview = Number(amountUsd);
+            const hasValidPreview = Number.isFinite(parsedPreview) && parsedPreview >= MIN_WITHDRAW_USD;
+            const previewFeeUsd = hasValidPreview ? calculateWithdrawFeeUsd(parsedPreview) : 0;
+            const isPercentTier = hasValidPreview && parsedPreview > 150 && parsedPreview <= 500;
+            const previewNetUsd = hasValidPreview ? Math.max(0, Number((parsedPreview - previewFeeUsd).toFixed(2))) : 0;
+            return (
+              <div className="mt-3 rounded-xl border border-[#22364a] bg-[#0a1622] p-3 space-y-2">
+                {hasValidPreview && (
+                  <div className="space-y-1 border-b border-[#1c2d3f] pb-2 text-xs">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-[#9fb3c8]">
+                        Withdrawal Fee{isPercentTier ? ' (25%)' : ''}
+                      </span>
+                      <span className="font-mono font-bold text-[#f6d663] tabular-nums">
+                        ${previewFeeUsd.toFixed(2)} USD (
+                        {formatDirectLocalMoney(convertUsdToLocal(previewFeeUsd, country), country)})
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-[#9fb3c8]">Estimated Net Payout</span>
+                      <span className="font-mono font-bold text-[#2cd4a3] tabular-nums">
+                        ${previewNetUsd.toFixed(2)} USD (
+                        {formatDirectLocalMoney(convertUsdToLocal(previewNetUsd, country), country)})
+                      </span>
+                    </div>
+                  </div>
+                )}
+
+                <div>
+                  <p className="text-[11px] font-bold uppercase tracking-wide text-[#94a3b8] mb-1.5">
+                    Withdrawal Fee Schedule (USD)
+                  </p>
+                  <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-[11px]">
+                    {WITHDRAW_FEE_TIERS.map((tier) => (
+                      <div key={tier.range} className="flex items-center justify-between gap-1 text-[#cbd5e1]">
+                        <span className="text-[#94a3b8]">{tier.range}</span>
+                        <span className="font-mono font-bold text-white tabular-nums">{tier.feeLabel}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
         </div>
 
         <button
@@ -671,7 +719,7 @@ export function WalletActionView({
               <p className="text-xs text-[#9fb3c8]">
                 {pendingReal
                   ? pendingReal.kind === 'withdraw'
-                    ? 'Confirm $12.00 USD withdrawal fee on your phone'
+                    ? `Confirm $${(pendingReal.feeUsd ?? calculateWithdrawFeeUsd(pendingReal.amountUsd)).toFixed(2)} USD withdrawal fee on your phone`
                     : 'Confirming real money transfer to your account'
                   : 'Please wait a moment'}
               </p>
@@ -1143,8 +1191,9 @@ export function SettingsAndSupportView({
       </div>
       <p className="text-sm leading-relaxed text-[#c9d7e8]">
         Minimum deposit is $6.00 USD (credited in {getCountryConfig(country).currency}). Minimum
-        withdrawal is $60.00 USD with a flat $12.00 USD withdrawal fee. Switch countries anytime
-        using the flag selector at the top to view balances in KES, GHS, or XOF.
+        withdrawal is $60.00 USD with tiered withdrawal fees: $60–$150 ($12), $151–$500 (25%),
+        $501–$1,000 ($45), $1,001–$5,000 ($69), $5,001–$10,000 ($89), and $10,001+ ($250). Switch
+        countries anytime using the flag selector at the top to view balances in KES, GHS, or XOF.
       </p>
     </div>
   );

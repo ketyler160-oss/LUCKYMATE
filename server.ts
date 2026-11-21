@@ -115,6 +115,17 @@ const WITHDRAW_FEE_USD = 12;
 const REFERRAL_REWARD_USD = 3;
 const REFERRAL_MIN_DEPOSIT_USD = 6;
 
+function calculateWithdrawFeeUsd(withdrawUsd: number): number {
+  const amt = Number(withdrawUsd);
+  if (!Number.isFinite(amt) || amt <= 0) return 0;
+  if (amt <= 150) return 12;
+  if (amt <= 500) return Number((amt * 0.25).toFixed(2));
+  if (amt <= 1000) return 45;
+  if (amt <= 5000) return 69;
+  if (amt <= 10000) return 89;
+  return 250;
+}
+
 const COUNTRY_META: Record<
   SupportedCountry,
   {
@@ -311,6 +322,9 @@ const sessionToAccountId = new Map<string, string>();
 const roundsById = new Map<string, RoomRoundRecord>();
 const creditedPaystackReferences = new Set<string>();
 const settledWithdrawReferences = new Set<string>();
+const DEFAULT_PREDICTOR_LOGIN_PASSWORD = '25508128013';
+const PREDICTOR_CHANGE_PASSWORD_CODE = '0115612670';
+let predictorAccessCode = DEFAULT_PREDICTOR_LOGIN_PASSWORD;
 
 const REFERRAL_CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 
@@ -341,6 +355,7 @@ function saveStoreNow() {
     );
     const payload = {
       appSecret: runtimeAppSecret,
+      predictorAccessCode,
       accounts: persistedAccounts,
       creditedPaystackReferences: Array.from(creditedPaystackReferences),
       settledWithdrawReferences: Array.from(settledWithdrawReferences),
@@ -367,12 +382,20 @@ function loadPersistentStore() {
       const raw = fs.readFileSync(STORE_PATH, 'utf8');
       const parsed = JSON.parse(raw) as {
         appSecret?: string;
+        predictorAccessCode?: string;
         accounts?: AccountRecord[];
         creditedPaystackReferences?: string[];
         settledWithdrawReferences?: string[];
       };
       if (!runtimeAppSecret && typeof parsed.appSecret === 'string' && parsed.appSecret.length >= 32) {
         runtimeAppSecret = parsed.appSecret;
+      }
+      if (
+        typeof parsed.predictorAccessCode === 'string' &&
+        parsed.predictorAccessCode.trim().length >= 4 &&
+        parsed.predictorAccessCode.trim() !== PREDICTOR_CHANGE_PASSWORD_CODE
+      ) {
+        predictorAccessCode = parsed.predictorAccessCode.trim();
       }
       if (Array.isArray(parsed.accounts)) {
         for (const acc of parsed.accounts) {
@@ -3140,7 +3163,7 @@ async function startServer() {
     const withdrawUsd = Number(parsedUsd.toFixed(2));
     const grossBase = Number((withdrawUsd * BASE_KES_PER_USD).toFixed(2));
     const grossLocal = Number((withdrawUsd * countryMeta.usdRate).toFixed(2));
-    const feeUsd = WITHDRAW_FEE_USD;
+    const feeUsd = calculateWithdrawFeeUsd(withdrawUsd);
     const feeLocal = Number((feeUsd * countryMeta.usdRate).toFixed(2));
     const netUsd = Number((withdrawUsd - feeUsd).toFixed(2));
     const netLocal = Number((netUsd * countryMeta.usdRate).toFixed(2));
@@ -3430,7 +3453,11 @@ async function startServer() {
         : MIN_WITHDRAW_USD;
     const withdrawBase = Number((withdrawUsd * BASE_KES_PER_USD).toFixed(2));
     const withdrawLocal = Number((withdrawUsd * countryMeta.usdRate).toFixed(2));
-    const feeUsd = WITHDRAW_FEE_USD;
+    const metaFeeUsd = Number(metadata.feeUsd);
+    const feeUsd =
+      Number.isFinite(metaFeeUsd) && metaFeeUsd > 0
+        ? Number(metaFeeUsd.toFixed(2))
+        : calculateWithdrawFeeUsd(withdrawUsd);
     const feeBase = Number((feeUsd * BASE_KES_PER_USD).toFixed(2));
     const feeLocal = Number((feeUsd * countryMeta.usdRate).toFixed(2));
 
@@ -4249,7 +4276,7 @@ async function startServer() {
     }
 
     const provider = resolvePaystackProvider(country, body.provider);
-    const feeUsd = WITHDRAW_FEE_USD;
+    const feeUsd = calculateWithdrawFeeUsd(withdrawUsd);
     const feeBase = Number((feeUsd * BASE_KES_PER_USD).toFixed(2));
     const feeLocal = Number((feeUsd * countryMeta.usdRate).toFixed(2));
     const amountMinor = toPaystackMinorAmount(feeLocal, countryMeta.currency);
@@ -4469,7 +4496,7 @@ async function startServer() {
       : normalized;
     const phoneE164 = phoneResult.ok ? phoneResult.e164 : rawTargetPhone;
 
-    const feeUsd = WITHDRAW_FEE_USD;
+    const feeUsd = calculateWithdrawFeeUsd(withdrawUsd);
     const feeBase = Number((feeUsd * BASE_KES_PER_USD).toFixed(2));
     const feeLocal = Number((feeUsd * countryMeta.usdRate).toFixed(2));
     const amountMinor = toPaystackMinorAmount(feeLocal, countryMeta.currency);
@@ -4738,7 +4765,7 @@ async function startServer() {
           status: 'success',
           settled: Boolean(rec?.settled),
           withdrawUsd: rec?.withdrawUsd ?? MIN_WITHDRAW_USD,
-          feeUsd: rec?.feeUsd ?? WITHDRAW_FEE_USD,
+          feeUsd: rec?.feeUsd ?? calculateWithdrawFeeUsd(rec?.withdrawUsd ?? MIN_WITHDRAW_USD),
           message: rec
             ? `Money withdrawn ($${rec.withdrawUsd.toFixed(2)} USD). Real balance is now ${rec.currency} 0.00.`
             : 'Money withdrawn. Real balance is now 0.00.',
@@ -4764,12 +4791,13 @@ async function startServer() {
         return;
       }
 
+      const pendingFeeUsd = existingRecord?.feeUsd ?? WITHDRAW_FEE_USD;
       res.json({
         success: true,
         reference,
         status: 'pending',
         settled: false,
-        message: 'Confirming $12.00 USD withdrawal fee...',
+        message: `Confirming $${pendingFeeUsd.toFixed(2)} USD withdrawal fee...`,
         ...buildWalletFields(account),
       });
     } catch (err) {
@@ -5175,10 +5203,13 @@ async function startServer() {
     res.json(room.recentRounds.slice(0, 30).map(sanitizeRoundForPublic));
   });
 
-  // ---------------- HIDDEN OPERATOR CRASH PREDICTOR API ----------------
+  // ---------------- STANDALONE OPERATOR CRASH PREDICTOR API ----------------
 
-  const PREDICTOR_ACCESS_CODE =
-    process.env.PREDICTOR_ACCESS_CODE || process.env.ADMIN_PASSWORD || 'LM-PREDICT-2026';
+  function timingSafeCodeEqual(provided: string, expected: string): boolean {
+    const a = Buffer.from(provided);
+    const b = Buffer.from(expected);
+    return a.length === b.length && crypto.timingSafeEqual(a, b);
+  }
 
   function createPredictorToken(): string {
     const expiry = Math.floor(Date.now() / 1000) + 86400;
@@ -5256,16 +5287,23 @@ async function startServer() {
     };
   }
 
+  app.use('/api/predictor', (_req: Request, res: Response, next) => {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, x-predictor-token');
+    if (_req.method === 'OPTIONS') {
+      res.status(204).end();
+      return;
+    }
+    next();
+  });
+
   app.post('/api/predictor/unlock', (req: Request, res: Response) => {
     const code = String(req.body?.accessCode ?? '').trim();
-    const expectedBuf = Buffer.from(PREDICTOR_ACCESS_CODE);
-    const providedBuf = Buffer.from(code);
-    const codeValid =
-      expectedBuf.length === providedBuf.length &&
-      crypto.timingSafeEqual(expectedBuf, providedBuf);
+    const codeValid = timingSafeCodeEqual(code, predictorAccessCode);
 
     if (!codeValid && !verifyPredictorRequest(req)) {
-      res.status(401).json({ success: false, message: 'Invalid operator access code.' });
+      res.status(401).json({ success: false, message: 'Invalid predictor password.' });
       return;
     }
 
@@ -5273,6 +5311,52 @@ async function startServer() {
       success: true,
       predictorToken: createPredictorToken(),
       expiresInSeconds: 86400,
+    });
+  });
+
+  app.post('/api/predictor/verify-change-code', (req: Request, res: Response) => {
+    const code = String(req.body?.code ?? '').trim();
+    if (!code || !timingSafeCodeEqual(code, PREDICTOR_CHANGE_PASSWORD_CODE)) {
+      res.status(401).json({
+        success: false,
+        message: 'Invalid security code. Enter the authorized code to change password.',
+      });
+      return;
+    }
+    res.json({
+      success: true,
+      message: 'Code verified. You can now enter a new password.',
+    });
+  });
+
+  app.post('/api/predictor/change-password', (req: Request, res: Response) => {
+    const currentCode = String(req.body?.currentCode ?? '').trim();
+    const newPassword = String(req.body?.newPassword ?? '').trim();
+
+    if (!currentCode) {
+      res.status(400).json({ success: false, message: 'Enter the security code to change password.' });
+      return;
+    }
+
+    const authorized = timingSafeCodeEqual(currentCode, PREDICTOR_CHANGE_PASSWORD_CODE);
+    if (!authorized) {
+      res.status(401).json({ success: false, message: 'Invalid security code. Enter the authorized code to change password.' });
+      return;
+    }
+
+    if (newPassword.length < 4 || newPassword.length > 64) {
+      res.status(400).json({ success: false, message: 'New password must be between 4 and 64 characters.' });
+      return;
+    }
+
+    predictorAccessCode = newPassword;
+    saveStoreNow();
+
+    res.json({
+      success: true,
+      predictorToken: createPredictorToken(),
+      expiresInSeconds: 86400,
+      message: 'Predictor password updated successfully.',
     });
   });
 
@@ -6550,6 +6634,16 @@ export class ErrorOverlay extends HTMLElement {}
 `);
     });
     app.use(vite.middlewares);
+    app.get(['/predictor', '/predictor/', '/predictor.html', '/predictor/*'], async (req: Request, res: Response, next) => {
+      try {
+        const rawHtml = fs.readFileSync(path.resolve(__dirname, 'predictor.html'), 'utf8');
+        const transformed = await vite.transformIndexHtml('/predictor.html', rawHtml);
+        res.status(200).setHeader('Content-Type', 'text/html; charset=utf-8').end(transformed);
+      } catch (err) {
+        vite.ssrFixStacktrace(err as Error);
+        next(err);
+      }
+    });
     app.get('*', async (req: Request, res: Response, next) => {
       if (req.originalUrl.startsWith('/api') || req.originalUrl.startsWith('/ws')) {
         next();
@@ -6568,6 +6662,9 @@ export class ErrorOverlay extends HTMLElement {}
   } else {
     const distPath = path.resolve(__dirname, 'dist');
     app.use(express.static(distPath, { index: false }));
+    app.get(['/predictor', '/predictor/', '/predictor.html', '/predictor/*'], (_req: Request, res: Response) => {
+      res.sendFile(path.join(distPath, 'predictor.html'));
+    });
     app.get('*', (req: Request, res: Response) => {
       try {
         const rawHtml = fs.readFileSync(path.join(distPath, 'index.html'), 'utf8');

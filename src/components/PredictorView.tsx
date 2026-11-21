@@ -2,27 +2,40 @@ import { FormEvent, useCallback, useEffect, useState } from 'react';
 import {
   ArrowRight,
   BarChart3,
+  Check,
   CheckCircle2,
   Clock,
+  Copy,
   Crosshair,
+  Eye,
+  EyeOff,
+  Globe,
   Grid,
+  KeyRound,
   Lock,
+  LogOut,
   Plane,
   ShieldCheck,
   X,
   Zap,
 } from 'lucide-react';
 import {
+  changePredictorPassword,
   fetchPredictorAll,
+  getStoredPredictorServerUrl,
   getStoredPredictorToken,
+  normalizeServerBaseUrl,
+  storePredictorServerUrl,
   storePredictorToken,
   unlockPredictor,
-} from '../lib/api';
+  verifyPredictorChangeCode,
+} from '../lib/predictorApi';
 import { CrashGameId, PredictorGameSnapshot } from '../types';
 
 interface PredictorViewProps {
   initialGameId?: CrashGameId;
-  onClose: () => void;
+  standalone?: boolean;
+  onClose?: () => void;
 }
 
 function formatTimer(seconds: number): string {
@@ -33,11 +46,29 @@ function formatTimer(seconds: number): string {
   return `${String(hrs).padStart(2, '0')}:${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
 }
 
-export function PredictorView({ initialGameId = 'aviator', onClose }: PredictorViewProps) {
+export function PredictorView({
+  initialGameId = 'aviator',
+  standalone = false,
+  onClose,
+}: PredictorViewProps) {
   const [token, setToken] = useState<string>(() => getStoredPredictorToken());
+  const [serverUrl, setServerUrl] = useState<string>(() => getStoredPredictorServerUrl());
+  const [showServerConfig, setShowServerConfig] = useState<boolean>(() => Boolean(getStoredPredictorServerUrl()));
   const [accessCode, setAccessCode] = useState('');
+  const [showLoginPassword, setShowLoginPassword] = useState(false);
   const [unlocking, setUnlocking] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
+  const [copiedLink, setCopiedLink] = useState(false);
+
+  const [changePwOpen, setChangePwOpen] = useState(false);
+  const [changeCodeVerified, setChangeCodeVerified] = useState(false);
+  const [verifyingCode, setVerifyingCode] = useState(false);
+  const [verifyCode, setVerifyCode] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmNewPassword, setConfirmNewPassword] = useState('');
+  const [showChangePw, setShowChangePw] = useState(false);
+  const [changingPw, setChangingPw] = useState(false);
+  const [changePwFeedback, setChangePwFeedback] = useState<{ ok: boolean; text: string } | null>(null);
 
   const [selectedGame, setSelectedGame] = useState<CrashGameId>(initialGameId);
   const [viewMode, setViewMode] = useState<'single' | 'all'>('single');
@@ -47,10 +78,10 @@ export function PredictorView({ initialGameId = 'aviator', onClose }: PredictorV
   const [fetchError, setFetchError] = useState<string | null>(null);
 
   const loadSnapshots = useCallback(
-    async (activeToken: string) => {
+    async (activeToken: string, activeServerUrl: string) => {
       if (!activeToken) return;
       try {
-        const res = await fetchPredictorAll(activeToken);
+        const res = await fetchPredictorAll(activeToken, activeServerUrl);
         setGames(res.games);
         setFetchError(null);
       } catch (err) {
@@ -58,7 +89,7 @@ export function PredictorView({ initialGameId = 'aviator', onClose }: PredictorV
         if (msg.toLowerCase().includes('forbidden') || msg.includes('403')) {
           storePredictorToken(null);
           setToken('');
-          setAuthError('Session expired. Enter operator access code to unlock.');
+          setAuthError('Session expired. Enter predictor password to log in.');
         } else {
           setFetchError(msg);
         }
@@ -69,26 +100,110 @@ export function PredictorView({ initialGameId = 'aviator', onClose }: PredictorV
 
   useEffect(() => {
     if (!token) return;
-    loadSnapshots(token);
+    loadSnapshots(token, serverUrl);
     const timer = window.setInterval(() => {
-      loadSnapshots(token);
+      loadSnapshots(token, serverUrl);
     }, 300);
     return () => window.clearInterval(timer);
-  }, [token, loadSnapshots]);
+  }, [token, serverUrl, loadSnapshots]);
 
   const handleUnlock = async (e: FormEvent) => {
     e.preventDefault();
     if (!accessCode.trim()) return;
     setUnlocking(true);
     setAuthError(null);
+    const normalizedUrl = normalizeServerBaseUrl(serverUrl);
+    storePredictorServerUrl(normalizedUrl);
+    setServerUrl(normalizedUrl);
     try {
-      const res = await unlockPredictor(accessCode.trim());
+      const res = await unlockPredictor(accessCode.trim(), normalizedUrl);
       setToken(res.predictorToken);
       setAccessCode('');
     } catch (err) {
-      setAuthError(err instanceof Error ? err.message : 'Invalid access code.');
+      setAuthError(err instanceof Error ? err.message : 'Invalid predictor password.');
     } finally {
       setUnlocking(false);
+    }
+  };
+
+  const resetChangePasswordPanel = () => {
+    setChangePwOpen(false);
+    setChangeCodeVerified(false);
+    setVerifyCode('');
+    setNewPassword('');
+    setConfirmNewPassword('');
+    setChangePwFeedback(null);
+  };
+
+  const handleVerifyChangeCode = async (e: FormEvent) => {
+    e.preventDefault();
+    setChangePwFeedback(null);
+    if (!verifyCode.trim()) {
+      setChangePwFeedback({ ok: false, text: 'Enter the security code to continue.' });
+      return;
+    }
+
+    setVerifyingCode(true);
+    const normalizedUrl = normalizeServerBaseUrl(serverUrl);
+    storePredictorServerUrl(normalizedUrl);
+    setServerUrl(normalizedUrl);
+    try {
+      const res = await verifyPredictorChangeCode(verifyCode.trim(), normalizedUrl);
+      setChangeCodeVerified(true);
+      setChangePwFeedback({ ok: true, text: res.message || 'Code verified. Enter your new password below.' });
+    } catch (err) {
+      setChangeCodeVerified(false);
+      setChangePwFeedback({
+        ok: false,
+        text: err instanceof Error ? err.message : 'Invalid security code.',
+      });
+    } finally {
+      setVerifyingCode(false);
+    }
+  };
+
+  const handleChangePassword = async (e: FormEvent) => {
+    e.preventDefault();
+    setChangePwFeedback(null);
+    if (!changeCodeVerified || !verifyCode.trim()) {
+      setChangePwFeedback({ ok: false, text: 'Verify the security code first.' });
+      return;
+    }
+    if (newPassword.trim().length < 4) {
+      setChangePwFeedback({ ok: false, text: 'New password must be at least 4 characters.' });
+      return;
+    }
+    if (newPassword.trim() !== confirmNewPassword.trim()) {
+      setChangePwFeedback({ ok: false, text: 'New passwords do not match.' });
+      return;
+    }
+
+    setChangingPw(true);
+    const normalizedUrl = normalizeServerBaseUrl(serverUrl);
+    storePredictorServerUrl(normalizedUrl);
+    setServerUrl(normalizedUrl);
+    try {
+      const res = await changePredictorPassword(
+        verifyCode.trim(),
+        newPassword.trim(),
+        token || undefined,
+        normalizedUrl
+      );
+      if (res.predictorToken) {
+        setToken(res.predictorToken);
+      }
+      setChangeCodeVerified(false);
+      setVerifyCode('');
+      setNewPassword('');
+      setConfirmNewPassword('');
+      setChangePwFeedback({ ok: true, text: res.message || 'Password updated successfully.' });
+    } catch (err) {
+      setChangePwFeedback({
+        ok: false,
+        text: err instanceof Error ? err.message : 'Unable to update password.',
+      });
+    } finally {
+      setChangingPw(false);
     }
   };
 
@@ -96,58 +211,289 @@ export function PredictorView({ initialGameId = 'aviator', onClose }: PredictorV
     storePredictorToken(null);
     setToken('');
     setGames([]);
-    onClose();
+    setFetchError(null);
+    resetChangePasswordPanel();
+    if (!standalone) {
+      onClose?.();
+    }
   };
+
+  const handleCopyLink = async () => {
+    try {
+      const link = `${window.location.origin}/predictor`;
+      await navigator.clipboard.writeText(link);
+      setCopiedLink(true);
+      window.setTimeout(() => setCopiedLink(false), 2000);
+    } catch {
+      // Ignore clipboard failure
+    }
+  };
+
+  const renderChangePasswordForm = () => (
+    <form
+      onSubmit={changeCodeVerified ? handleChangePassword : handleVerifyChangeCode}
+      className="space-y-3 rounded-2xl border border-[#253042] bg-[#090d15] p-4"
+    >
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2 text-white">
+          <KeyRound className="h-4 w-4 text-[#f59e0b]" aria-hidden="true" />
+          <h2 className="font-display text-sm font-extrabold">Change Predictor Password</h2>
+        </div>
+        <button
+          type="button"
+          onClick={resetChangePasswordPanel}
+          aria-label="Close change password"
+          className="rounded-lg p-1 text-[#94a3b8] hover:bg-[#1a2230] hover:text-white cursor-pointer"
+        >
+          <X className="h-4 w-4" />
+        </button>
+      </div>
+
+      {!changeCodeVerified ? (
+        <>
+          <p className="text-xs text-[#94a3b8]">
+            Enter the security code first to unlock the new password fields.
+          </p>
+
+          <div>
+            <label htmlFor="predictor-verify-code" className="block text-xs font-semibold text-[#94a3b8] mb-1">
+              Security Code
+            </label>
+            <input
+              id="predictor-verify-code"
+              type={showChangePw ? 'text' : 'password'}
+              autoFocus
+              value={verifyCode}
+              onChange={(e) => setVerifyCode(e.target.value)}
+              placeholder="Enter security code..."
+              className="min-h-[40px] w-full rounded-xl border border-[#2a3649] bg-[#06090f] px-3 py-2 text-sm text-white placeholder:text-[#475569] focus:border-[#f59e0b] focus:outline-none"
+            />
+          </div>
+
+          <button
+            type="button"
+            onClick={() => setShowChangePw((prev) => !prev)}
+            className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-[#94a3b8] hover:text-white cursor-pointer"
+          >
+            {showChangePw ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+            <span>{showChangePw ? 'Hide code' : 'Show code'}</span>
+          </button>
+
+          {changePwFeedback && (
+            <p
+              role="alert"
+              className={`text-xs font-semibold ${changePwFeedback.ok ? 'text-[#22c55e]' : 'text-[#f87171]'}`}
+            >
+              {changePwFeedback.text}
+            </p>
+          )}
+
+          <button
+            type="submit"
+            disabled={verifyingCode}
+            className="min-h-[40px] w-full rounded-xl bg-gradient-to-r from-[#d97706] to-[#f59e0b] px-4 py-2 text-xs font-extrabold text-[#0b0f17] shadow hover:brightness-110 disabled:opacity-60 cursor-pointer"
+          >
+            {verifyingCode ? 'Verifying Code...' : 'Verify Code'}
+          </button>
+        </>
+      ) : (
+        <>
+          <div className="flex items-center gap-1.5 rounded-xl border border-[#22c55e]/30 bg-[#22c55e]/10 px-3 py-2 text-xs font-semibold text-[#22c55e]">
+            <CheckCircle2 className="h-4 w-4 shrink-0" aria-hidden="true" />
+            <span>Code verified — enter your new Predictor password</span>
+          </div>
+
+          <div>
+            <label htmlFor="predictor-new-password" className="block text-xs font-semibold text-[#94a3b8] mb-1">
+              New Predictor Password
+            </label>
+            <input
+              id="predictor-new-password"
+              type={showChangePw ? 'text' : 'password'}
+              autoFocus
+              value={newPassword}
+              onChange={(e) => setNewPassword(e.target.value)}
+              placeholder="Enter new password..."
+              className="min-h-[40px] w-full rounded-xl border border-[#2a3649] bg-[#06090f] px-3 py-2 text-sm text-white placeholder:text-[#475569] focus:border-[#22c55e] focus:outline-none"
+            />
+          </div>
+
+          <div>
+            <label htmlFor="predictor-confirm-password" className="block text-xs font-semibold text-[#94a3b8] mb-1">
+              Confirm New Password
+            </label>
+            <input
+              id="predictor-confirm-password"
+              type={showChangePw ? 'text' : 'password'}
+              value={confirmNewPassword}
+              onChange={(e) => setConfirmNewPassword(e.target.value)}
+              placeholder="Re-enter new password..."
+              className="min-h-[40px] w-full rounded-xl border border-[#2a3649] bg-[#06090f] px-3 py-2 text-sm text-white placeholder:text-[#475569] focus:border-[#22c55e] focus:outline-none"
+            />
+          </div>
+
+          <button
+            type="button"
+            onClick={() => setShowChangePw((prev) => !prev)}
+            className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-[#94a3b8] hover:text-white cursor-pointer"
+          >
+            {showChangePw ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+            <span>{showChangePw ? 'Hide passwords' : 'Show passwords'}</span>
+          </button>
+
+          {changePwFeedback && (
+            <p
+              role="alert"
+              className={`text-xs font-semibold ${changePwFeedback.ok ? 'text-[#22c55e]' : 'text-[#f87171]'}`}
+            >
+              {changePwFeedback.text}
+            </p>
+          )}
+
+          <button
+            type="submit"
+            disabled={changingPw}
+            className="min-h-[40px] w-full rounded-xl bg-gradient-to-r from-[#16a34a] to-[#22c55e] px-4 py-2 text-xs font-extrabold text-[#04140a] shadow hover:brightness-110 disabled:opacity-60 cursor-pointer"
+          >
+            {changingPw ? 'Saving...' : 'Save New Password'}
+          </button>
+        </>
+      )}
+    </form>
+  );
+
+  const outerWrapperClass = standalone
+    ? 'min-h-screen w-full bg-[#04060a] px-3 py-5 sm:p-6 flex items-center justify-center'
+    : 'fixed inset-0 z-50 flex items-center justify-center bg-[#04060a]/95 p-4 backdrop-blur-md';
 
   if (!token) {
     return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#04060a]/95 p-4 backdrop-blur-md">
-        <div className="w-full max-w-sm rounded-2xl border border-[#222c3c] bg-[#0b0f17] p-6 shadow-2xl">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-2 text-white">
-              <Lock className="h-4 w-4 text-[#ef4444]" aria-hidden="true" />
-              <h2 className="font-display text-base font-extrabold">Restricted Operator Console</h2>
+      <div className={outerWrapperClass}>
+        <div className="w-full max-w-sm rounded-2xl border border-[#222c3c] bg-[#0b0f17] p-6 shadow-[0_0_50px_rgba(239,68,68,0.14)] space-y-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2.5 text-white">
+              <div className="flex h-9 w-9 items-center justify-center rounded-xl border border-[#ef4444]/40 bg-[#ef4444]/15 text-[#ef4444]">
+                <Plane className="h-5 w-5 -rotate-12 fill-current" aria-hidden="true" />
+              </div>
+              <div className="leading-tight">
+                <h1 className="font-display text-base font-black tracking-tight text-white">
+                  Crash Predictor
+                </h1>
+                <p className="text-[11px] font-medium text-[#94a3b8]">Standalone Signal Console</p>
+              </div>
             </div>
-            <button
-              type="button"
-              onClick={onClose}
-              aria-label="Exit"
-              className="rounded-lg p-1.5 text-[#8e9bae] hover:bg-[#1a2230] hover:text-white cursor-pointer"
-            >
-              <X className="h-4 w-4" />
-            </button>
+            {!standalone && onClose && (
+              <button
+                type="button"
+                onClick={onClose}
+                aria-label="Exit"
+                className="rounded-lg p-1.5 text-[#8e9bae] hover:bg-[#1a2230] hover:text-white cursor-pointer"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            )}
           </div>
 
-          <form onSubmit={handleUnlock} className="space-y-3">
-            <div>
-              <label htmlFor="predictor-code-input" className="block text-xs font-semibold text-[#94a3b8] mb-1">
-                Operator Access Code
-              </label>
-              <input
-                id="predictor-code-input"
-                type="password"
-                autoFocus
-                value={accessCode}
-                onChange={(e) => setAccessCode(e.target.value)}
-                placeholder="Enter access code..."
-                className="min-h-[42px] w-full rounded-xl border border-[#2a3649] bg-[#070a0f] px-3.5 py-2 text-sm text-white placeholder:text-[#475569] focus:border-[#ef4444] focus:outline-none"
-              />
-            </div>
+          {changePwOpen ? (
+            renderChangePasswordForm()
+          ) : (
+            <form onSubmit={handleUnlock} className="space-y-3.5">
+              <div>
+                <label
+                  htmlFor="predictor-code-input"
+                  className="flex items-center gap-1.5 text-xs font-semibold text-[#94a3b8] mb-1.5"
+                >
+                  <Lock className="h-3.5 w-3.5 text-[#ef4444]" aria-hidden="true" />
+                  <span>Predictor Password</span>
+                </label>
+                <div className="relative">
+                  <input
+                    id="predictor-code-input"
+                    type={showLoginPassword ? 'text' : 'password'}
+                    autoFocus
+                    value={accessCode}
+                    onChange={(e) => setAccessCode(e.target.value)}
+                    placeholder="Enter predictor password..."
+                    className="min-h-[42px] w-full rounded-xl border border-[#2a3649] bg-[#070a0f] pl-3.5 pr-10 py-2 text-sm text-white placeholder:text-[#475569] focus:border-[#ef4444] focus:outline-none"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowLoginPassword((prev) => !prev)}
+                    aria-label={showLoginPassword ? 'Hide password' : 'Show password'}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 text-[#64748b] hover:text-white cursor-pointer"
+                  >
+                    {showLoginPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
+                </div>
+              </div>
 
-            {authError && (
-              <p role="alert" className="text-xs font-medium text-[#f87171]">
-                {authError}
-              </p>
-            )}
+              <div>
+                <button
+                  type="button"
+                  onClick={() => setShowServerConfig((prev) => !prev)}
+                  className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-[#94a3b8] hover:text-white cursor-pointer"
+                >
+                  <Globe className="h-3.5 w-3.5 text-[#38bdf8]" aria-hidden="true" />
+                  <span>
+                    {showServerConfig ? 'Hide Server Connection' : 'Connect Remote Game Server (Optional)'}
+                  </span>
+                </button>
 
-            <button
-              type="submit"
-              disabled={unlocking}
-              className="min-h-[42px] w-full rounded-xl bg-gradient-to-r from-[#dc2626] to-[#ef4444] px-4 py-2 text-sm font-extrabold text-white shadow-lg hover:brightness-110 disabled:opacity-60 cursor-pointer"
-            >
-              {unlocking ? 'Verifying...' : 'Unlock Predictor'}
-            </button>
-          </form>
+                {showServerConfig && (
+                  <div className="mt-2">
+                    <label htmlFor="predictor-server-input" className="block text-[11px] text-[#64748b] mb-1">
+                      Leave blank to use this server, or enter your deployed Luckymate URL
+                    </label>
+                    <input
+                      id="predictor-server-input"
+                      type="url"
+                      value={serverUrl}
+                      onChange={(e) => setServerUrl(e.target.value)}
+                      placeholder="https://your-luckymate-domain.com"
+                      className="min-h-[40px] w-full rounded-xl border border-[#2a3649] bg-[#070a0f] px-3 py-2 text-xs text-white placeholder:text-[#475569] focus:border-[#38bdf8] focus:outline-none"
+                    />
+                  </div>
+                )}
+              </div>
+
+              {authError && (
+                <p role="alert" className="text-xs font-medium text-[#f87171]">
+                  {authError}
+                </p>
+              )}
+
+              <button
+                type="submit"
+                disabled={unlocking}
+                className="min-h-[42px] w-full rounded-xl bg-gradient-to-r from-[#dc2626] to-[#ef4444] px-4 py-2 text-sm font-extrabold text-white shadow-lg hover:brightness-110 disabled:opacity-60 cursor-pointer"
+              >
+                {unlocking ? 'Verifying...' : 'Log In to Predictor'}
+              </button>
+
+              <div className="flex items-center justify-between pt-1">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setChangePwOpen(true);
+                    setChangePwFeedback(null);
+                  }}
+                  className="inline-flex items-center gap-1.5 text-xs font-semibold text-[#f59e0b] hover:underline cursor-pointer"
+                >
+                  <KeyRound className="h-3.5 w-3.5" aria-hidden="true" />
+                  <span>Change Password</span>
+                </button>
+
+                {standalone && (
+                  <a
+                    href="/"
+                    className="text-xs font-semibold text-[#64748b] hover:text-white"
+                  >
+                    Back to Luckymate
+                  </a>
+                )}
+              </div>
+            </form>
+          )}
         </div>
       </div>
     );
@@ -157,9 +503,15 @@ export function PredictorView({ initialGameId = 'aviator', onClose }: PredictorV
   const recentLimit = showAllResults ? 12 : 6;
 
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto bg-[#030508]/95 p-3 sm:p-5 backdrop-blur-md">
+    <div
+      className={
+        standalone
+          ? 'min-h-screen w-full bg-[#030508] p-3 sm:p-5'
+          : 'fixed inset-0 z-50 overflow-y-auto bg-[#030508]/95 p-3 sm:p-5 backdrop-blur-md'
+      }
+    >
       <div className="mx-auto max-w-2xl rounded-3xl border border-[#1f2937] bg-gradient-to-b from-[#070b11] via-[#090d14] to-[#05070b] p-4 sm:p-5 shadow-[0_0_50px_rgba(239,68,68,0.18)]">
-        {/* Top Header matching screenshot */}
+        {/* Top Header */}
         <div className="flex flex-wrap items-center justify-between gap-3 pb-3">
           <div className="flex items-center gap-2.5">
             <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#ef4444]/15 border border-[#ef4444]/40 text-[#ef4444] shadow-[0_0_15px_rgba(239,68,68,0.25)]">
@@ -189,6 +541,49 @@ export function PredictorView({ initialGameId = 'aviator', onClose }: PredictorV
 
             <button
               type="button"
+              onClick={() => {
+                if (changePwOpen) {
+                  resetChangePasswordPanel();
+                } else {
+                  setChangePwOpen(true);
+                  setChangeCodeVerified(false);
+                  setChangePwFeedback(null);
+                }
+              }}
+              title="Change Password"
+              className={`inline-flex h-10 items-center gap-1.5 rounded-xl border px-3 text-xs font-bold cursor-pointer ${
+                changePwOpen
+                  ? 'border-[#f59e0b] bg-[#f59e0b]/15 text-[#fbbf24]'
+                  : 'border-[#253042] bg-[#0e141f] text-[#cbd5e1] hover:text-white'
+              }`}
+            >
+              <KeyRound className="h-4 w-4" aria-hidden="true" />
+              <span className="hidden sm:inline">Change Password</span>
+            </button>
+
+            {standalone && (
+              <button
+                type="button"
+                onClick={handleCopyLink}
+                title="Copy standalone predictor link"
+                className="inline-flex h-10 items-center gap-1.5 rounded-xl border border-[#253042] bg-[#0e141f] px-3 text-xs font-bold text-[#cbd5e1] hover:text-white cursor-pointer"
+              >
+                {copiedLink ? (
+                  <>
+                    <Check className="h-4 w-4 text-[#22c55e]" aria-hidden="true" />
+                    <span className="hidden sm:inline text-[#22c55e]">Copied</span>
+                  </>
+                ) : (
+                  <>
+                    <Copy className="h-4 w-4" aria-hidden="true" />
+                    <span className="hidden sm:inline">Link</span>
+                  </>
+                )}
+              </button>
+            )}
+
+            <button
+              type="button"
               onClick={() => setViewMode((m) => (m === 'single' ? 'all' : 'single'))}
               title="Toggle All 11 Crash Games Grid"
               className={`inline-flex h-10 items-center gap-1.5 rounded-xl border px-3 text-xs font-bold cursor-pointer ${
@@ -204,13 +599,16 @@ export function PredictorView({ initialGameId = 'aviator', onClose }: PredictorV
             <button
               type="button"
               onClick={handleLock}
-              aria-label="Lock and close predictor"
+              aria-label={standalone ? 'Lock predictor' : 'Lock and close predictor'}
+              title="Lock Predictor"
               className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-[#253042] bg-[#0e141f] text-[#94a3b8] hover:border-[#ef4444] hover:text-white cursor-pointer"
             >
-              <X className="h-4 w-4" />
+              {standalone ? <LogOut className="h-4 w-4" /> : <X className="h-4 w-4" />}
             </button>
           </div>
         </div>
+
+        {changePwOpen && <div className="mb-3.5">{renderChangePasswordForm()}</div>}
 
         {/* All 11 Crash Games Switcher Pills */}
         <div className="no-scrollbar mb-3.5 flex items-center gap-1.5 overflow-x-auto pb-1">

@@ -22,6 +22,26 @@ export const REFERRAL_MIN_DEPOSIT_USD = 6;
 export const DEPOSIT_USD_PRESETS = [6, 10, 25, 50, 100] as const;
 export const WITHDRAW_USD_PRESETS = [60, 100, 200, 500] as const;
 
+export const WITHDRAW_FEE_TIERS = [
+  { range: '$60 – $150', feeLabel: '$12.00' },
+  { range: '$151 – $500', feeLabel: '25%' },
+  { range: '$501 – $1,000', feeLabel: '$45.00' },
+  { range: '$1,001 – $5,000', feeLabel: '$69.00' },
+  { range: '$5,001 – $10,000', feeLabel: '$89.00' },
+  { range: '$10,001+', feeLabel: '$250.00' },
+] as const;
+
+export function calculateWithdrawFeeUsd(withdrawUsd: number): number {
+  const amt = Number(withdrawUsd);
+  if (!Number.isFinite(amt) || amt <= 0) return 0;
+  if (amt <= 150) return 12;
+  if (amt <= 500) return Number((amt * 0.25).toFixed(2));
+  if (amt <= 1000) return 45;
+  if (amt <= 5000) return 69;
+  if (amt <= 10000) return 89;
+  return 250;
+}
+
 export const COUNTRY_ORDER: CountryOption[] = ['Kenya', 'Ghana', "Côte d'Ivoire"];
 
 export const COUNTRIES: Record<CountryOption, CountryConfig> = {

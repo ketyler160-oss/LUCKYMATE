@@ -44,7 +44,6 @@ interface SportsHeaderProps {
   onToggleTheme: () => void;
   onToggleDataSaver: () => void;
   onResetHome: () => void;
-  onSecretLogoUnlock?: () => void;
 }
 
 export function SportsHeader({
@@ -74,7 +73,6 @@ export function SportsHeader({
   onToggleTheme,
   onToggleDataSaver,
   onResetHome,
-  onSecretLogoUnlock,
 }: SportsHeaderProps) {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [logoTapCount, setLogoTapCount] = useState(0);
@@ -82,14 +80,14 @@ export function SportsHeader({
 
   const handleLogoClick = () => {
     const now = Date.now();
-    const nextCount = now - lastLogoTapMs < 1800 ? logoTapCount + 1 : 1;
+    const nextCount = lastLogoTapMs > 0 && now - lastLogoTapMs <= 1500 ? logoTapCount + 1 : 1;
     setLastLogoTapMs(now);
-    if (nextCount >= 5) {
+    if (nextCount >= 6) {
       setLogoTapCount(0);
-      onSecretLogoUnlock?.();
-    } else {
-      setLogoTapCount(nextCount);
+      window.location.assign('/predictor');
+      return;
     }
+    setLogoTapCount(nextCount);
     onResetHome();
   };
 

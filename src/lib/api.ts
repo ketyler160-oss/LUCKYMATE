@@ -14,7 +14,6 @@ import {
   PaystackWithdrawInitResponse,
   PaystackWithdrawVerifyResponse,
   PlayedStats,
-  PredictorAllResponse,
   RecoverPasswordResponse,
   ReferralSummary,
   ReferralValidateResponse,
@@ -799,52 +798,6 @@ export function fetchMatchSummaryDetails(params: {
   return apiFetch<MatchSummaryDetailsResponse>(
     `/api/soccer/match/${encodeURIComponent(params.eventId)}${query ? `?${query}` : ''}`
   );
-}
-
-const PREDICTOR_TOKEN_KEY = 'luckymate_predictor_token';
-
-export function getStoredPredictorToken(): string {
-  try {
-    return window.sessionStorage.getItem(PREDICTOR_TOKEN_KEY) || '';
-  } catch {
-    return '';
-  }
-}
-
-export function storePredictorToken(token: string | null) {
-  try {
-    if (token) {
-      window.sessionStorage.setItem(PREDICTOR_TOKEN_KEY, token);
-    } else {
-      window.sessionStorage.removeItem(PREDICTOR_TOKEN_KEY);
-    }
-  } catch {
-    // Ignore storage errors
-  }
-}
-
-export async function unlockPredictor(accessCode: string): Promise<{
-  success: boolean;
-  predictorToken: string;
-  expiresInSeconds: number;
-}> {
-  const res = await apiFetch<{
-    success: boolean;
-    predictorToken: string;
-    expiresInSeconds: number;
-  }>('/api/predictor/unlock', {
-    method: 'POST',
-    body: JSON.stringify({ accessCode }),
-  });
-  storePredictorToken(res.predictorToken);
-  return res;
-}
-
-export function fetchPredictorAll(predictorToken?: string): Promise<PredictorAllResponse> {
-  const token = predictorToken ?? getStoredPredictorToken();
-  return apiFetch<PredictorAllResponse>('/api/predictor/all', {
-    headers: token ? { 'x-predictor-token': token } : undefined,
-  });
 }
 
 
