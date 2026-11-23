@@ -9,6 +9,8 @@ import type { Request, Response } from 'express';
 import nodemailer from 'nodemailer';
 import { WebSocket, WebSocketServer } from 'ws';
 import { GoogleGenAI, ThinkingLevel, Type } from '@google/genai';
+import { getStore } from '@netlify/blobs';
+import { getContext } from '@netlify/server';
 
 dotenv.config();
 
@@ -364,11 +366,36 @@ function generateUniqueReferralCode(): string {
 
 let saveTimer: ReturnType<typeof setTimeout> | null = null;
 
+// Persistent storage backend. On Netlify the server's filesystem is not
+// persistent (it is reset on every cold start and deploy), so the store lives
+// in Netlify Blobs. Outside Netlify (plain `tsx server.ts`) it falls back to a
+// local JSON file.
+const STORE_BLOB_KEY = 'luckymate-store';
+type BlobStore = ReturnType<typeof getStore>;
+let blobStore: BlobStore | null | undefined;
+
+function getBlobStore(): BlobStore | null {
+  if (blobStore !== undefined) return blobStore;
+  try {
+    blobStore = getStore({ name: 'luckymate', consistency: 'strong' });
+  } catch {
+    blobStore = null;
+  }
+  return blobStore;
+}
+
+let pendingWrite: Promise<void> = Promise.resolve();
+
+function registerBackgroundWork(promise: Promise<unknown>) {
+  try {
+    getContext().waitUntil(promise);
+  } catch {
+    // Not handling a Netlify Server request (local dev or startup); nothing to register.
+  }
+}
+
 function saveStoreNow() {
   try {
-    if (!fs.existsSync(STORE_DIR)) {
-      fs.mkdirSync(STORE_DIR, { recursive: true });
-    }
     const persistedAccounts = Array.from(accountsById.values()).filter(
       (a) => !a.isGuest || a.realBalance > 0 || a.history.length > 3
     );
@@ -379,8 +406,25 @@ function saveStoreNow() {
       creditedPaystackReferences: Array.from(creditedPaystackReferences),
       settledWithdrawReferences: Array.from(settledWithdrawReferences),
     };
+    const serialized = JSON.stringify(payload);
+    const store = getBlobStore();
+    if (store) {
+      // Chain writes so they land in order and never overlap.
+      pendingWrite = pendingWrite
+        .then(async () => {
+          await store.set(STORE_BLOB_KEY, serialized);
+        })
+        .catch((err) => {
+          console.error('Failed to persist store:', err);
+        });
+      registerBackgroundWork(pendingWrite);
+      return;
+    }
+    if (!fs.existsSync(STORE_DIR)) {
+      fs.mkdirSync(STORE_DIR, { recursive: true });
+    }
     const tmpPath = `${STORE_PATH}.tmp`;
-    fs.writeFileSync(tmpPath, JSON.stringify(payload, null, 2), 'utf8');
+    fs.writeFileSync(tmpPath, serialized, 'utf8');
     fs.renameSync(tmpPath, STORE_PATH);
   } catch (err) {
     console.error('Failed to persist store:', err);
@@ -395,10 +439,36 @@ function scheduleSaveStore() {
   }, 150);
 }
 
-function loadPersistentStore() {
+async function readPersistedStore(): Promise<string | null> {
+  const store = getBlobStore();
+  if (store) {
+    return await store.get(STORE_BLOB_KEY, { type: 'text' });
+  }
+  if (fs.existsSync(STORE_PATH)) {
+    return fs.readFileSync(STORE_PATH, 'utf8');
+  }
+  return null;
+}
+
+async function readPersistedStoreWithRetry(): Promise<string | null> {
+  let lastErr: unknown;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      return await readPersistedStore();
+    } catch (err) {
+      lastErr = err;
+      await new Promise((resolve) => setTimeout(resolve, 250 * (attempt + 1)));
+    }
+  }
+  throw lastErr;
+}
+
+async function loadPersistentStore() {
+  // Read failures are not swallowed: starting with an empty store would
+  // overwrite every saved account on the next write.
+  const raw = await readPersistedStoreWithRetry();
   try {
-    if (fs.existsSync(STORE_PATH)) {
-      const raw = fs.readFileSync(STORE_PATH, 'utf8');
+    if (raw) {
       const parsed = JSON.parse(raw) as {
         appSecret?: string;
         predictorAccessCode?: string;
@@ -505,7 +575,7 @@ function loadPersistentStore() {
   }
 }
 
-loadPersistentStore();
+const storeReady = loadPersistentStore();
 
 function sha256Hex(value: string): string {
   return crypto.createHash('sha256').update(value).digest('hex');
@@ -1554,6 +1624,7 @@ function tickCrashRooms() {
 }
 
 async function startServer() {
+  await storeReady;
   const app = express();
   app.use(
     express.json({
@@ -6609,7 +6680,10 @@ Provide an objective breakdown covering:
   });
 
   if (process.env.NODE_ENV !== 'production') {
-    const { createServer: createViteServer } = await import('vite');
+    // The module name is kept out of static analysis so the production server
+    // bundle doesn't pull in Vite, which is only needed for local development.
+    const viteModuleName = 'vite';
+    const { createServer: createViteServer } = (await import(viteModuleName)) as typeof import('vite');
     const vite = await createViteServer({
       server: {
         middlewareMode: true,
