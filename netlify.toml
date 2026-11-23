@@ -1,0 +1,5 @@
+# Deep links under /predictor are served by the predictor page.
+[[redirects]]
+  from = "/predictor/*"
+  to = "/predictor.html"
+  status = 200

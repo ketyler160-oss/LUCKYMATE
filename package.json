@@ -13,6 +13,8 @@
   },
   "dependencies": {
     "@google/genai": "^3.3.0",
+    "@netlify/blobs": "^11.1.9",
+    "@netlify/server": "^0.1.6",
     "@tailwindcss/vite": "^4.3.3",
     "@types/nodemailer": "^8.0.2",
     "@types/ws": "^8.18.2",
