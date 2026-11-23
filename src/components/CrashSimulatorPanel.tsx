@@ -21,7 +21,13 @@ import {
   placeCrashRoomBet,
 } from '../lib/api';
 import { playCrashSfx, setCrashMusicEnabled } from '../lib/crashAudio';
-import { formatMoney, getCountryConfig } from '../lib/countries';
+import {
+  convertBaseToLocal,
+  formatDirectLocalMoney,
+  formatLocalNumber,
+  formatMoney,
+  getCountryConfig,
+} from '../lib/countries';
 import {
   AccountMode,
   CountryOption,
@@ -78,9 +84,7 @@ interface CrashSimulatorPanelProps {
 
 // SlipDraftState imported from ./crash/OtherCrashRoomView
 
-const AVIATOR_PRESETS = [100, 200, 500, 10000] as const;
-const JETX_PRESETS = [20, 50, 100] as const;
-const BCRASH_PRESETS = [10, 50, 100] as const;
+// Country-specific presets come from getCountryConfig(country)
 
 function createDefaultSlipDraft(stake = '10.00', autoTarget = '2.00'): SlipDraftState {
   return {
@@ -172,14 +176,22 @@ export function CrashSimulatorPanel({
     }
   });
 
+  const countryCfg = getCountryConfig(country);
+  const defaultCrashStakeStr = countryCfg.defaultCrashStake.toFixed(2);
   const [slip1Draft, setSlip1Draft] = useState<SlipDraftState>(() =>
-    createDefaultSlipDraft('10.00', '2.00')
+    createDefaultSlipDraft(defaultCrashStakeStr, '2.00')
   );
   const [slip2Draft, setSlip2Draft] = useState<SlipDraftState>(() =>
-    createDefaultSlipDraft('10.00', '3.00')
+    createDefaultSlipDraft(defaultCrashStakeStr, '3.00')
   );
   const [mySlip1Bet, setMySlip1Bet] = useState<RoomBetPublic | null>(null);
   const [mySlip2Bet, setMySlip2Bet] = useState<RoomBetPublic | null>(null);
+
+  useEffect(() => {
+    const nextDefault = getCountryConfig(country).defaultCrashStake.toFixed(2);
+    setSlip1Draft((d) => (mySlip1Ref.current?.status === 'active' ? d : { ...d, stakeAmount: nextDefault }));
+    setSlip2Draft((d) => (mySlip2Ref.current?.status === 'active' ? d : { ...d, stakeAmount: nextDefault }));
+  }, [country]);
 
   const mySlip1Ref = useRef<RoomBetPublic | null>(null);
   const mySlip2Ref = useRef<RoomBetPublic | null>(null);
@@ -301,7 +313,8 @@ export function CrashSimulatorPanel({
           slot,
           parsedAmount,
           parsedAuto,
-          accountModeRef.current
+          accountModeRef.current,
+          countryRef.current
         );
         playCrashSfx('bet', soundEnabledRef.current);
         setBet(res.bet);
@@ -640,7 +653,7 @@ export function CrashSimulatorPanel({
         submitting: false,
         message: {
           ok: true,
-          text: `Won ${formatKes(res.payout)} KES @ ${res.multiplier.toFixed(2)}x`,
+          text: `Won ${formatMoney(res.payout, countryRef.current)} @ ${res.multiplier.toFixed(2)}x`,
         },
       }));
     } catch (err) {
@@ -657,18 +670,20 @@ export function CrashSimulatorPanel({
 
   const adjustStake = (slot: 1 | 2, delta: number) => {
     const setDraft = slot === 1 ? setSlip1Draft : setSlip2Draft;
+    const cfg = getCountryConfig(countryRef.current);
     setDraft((d) => {
       const cur = Number(d.stakeAmount) || 0;
-      const next = Math.min(100000, Math.max(10, Number((cur + delta).toFixed(2))));
+      const next = Math.min(cfg.maxBetLocal, Math.max(cfg.minBetLocal, Number((cur + delta).toFixed(2))));
       return { ...d, stakeAmount: next.toFixed(2) };
     });
   };
 
   const scaleStake = (slot: 1 | 2, factor: number) => {
     const setDraft = slot === 1 ? setSlip1Draft : setSlip2Draft;
+    const cfg = getCountryConfig(countryRef.current);
     setDraft((d) => {
-      const cur = Number(d.stakeAmount) || 100;
-      const next = Math.min(100000, Math.max(10, Number((cur * factor).toFixed(2))));
+      const cur = Number(d.stakeAmount) || cfg.defaultCrashStake;
+      const next = Math.min(cfg.maxBetLocal, Math.max(cfg.minBetLocal, Number((cur * factor).toFixed(2))));
       return { ...d, stakeAmount: next.toFixed(2) };
     });
   };
@@ -852,15 +867,15 @@ export function CrashSimulatorPanel({
                   type="button"
                   aria-label={`Decrease JetX bet ${slot}`}
                   disabled={inputsDisabled}
-                  onClick={() => adjustStake(slot, -5)}
+                  onClick={() => adjustStake(slot, -countryCfg.betStep)}
                   className="flex h-7 w-7 items-center justify-center rounded-lg text-[#cbd5e1] hover:bg-white/10 hover:text-white cursor-pointer disabled:opacity-40"
                 >
                   <Minus className="h-4 w-4" aria-hidden="true" />
                 </button>
                 <input
                   type="number"
-                  min={1}
-                  max={100000}
+                  min={countryCfg.minBetLocal}
+                  max={countryCfg.maxBetLocal}
                   disabled={inputsDisabled}
                   value={draft.stakeAmount}
                   onChange={(e) =>
@@ -872,7 +887,7 @@ export function CrashSimulatorPanel({
                   type="button"
                   aria-label={`Increase JetX bet ${slot}`}
                   disabled={inputsDisabled}
-                  onClick={() => adjustStake(slot, 5)}
+                  onClick={() => adjustStake(slot, countryCfg.betStep)}
                   className="flex h-7 w-7 items-center justify-center rounded-lg text-[#cbd5e1] hover:bg-white/10 hover:text-white cursor-pointer disabled:opacity-40"
                 >
                   <Plus className="h-4 w-4" aria-hidden="true" />
@@ -880,7 +895,7 @@ export function CrashSimulatorPanel({
               </div>
 
               <div className="grid grid-cols-4 gap-1">
-                {JETX_PRESETS.map((preset) => (
+                {countryCfg.jetxPresets.map((preset) => (
                   <button
                     key={preset}
                     type="button"
@@ -896,12 +911,16 @@ export function CrashSimulatorPanel({
                 <button
                   type="button"
                   disabled={inputsDisabled}
-                  onClick={() =>
+                  onClick={() => {
+                    const localBal = convertBaseToLocal(activeModeBalance, country);
                     setDraft((d) => ({
                       ...d,
-                      stakeAmount: Math.max(10, Math.min(100000, Math.floor(activeModeBalance))).toFixed(2),
-                    }))
-                  }
+                      stakeAmount: Math.max(
+                        countryCfg.minBetLocal,
+                        Math.min(countryCfg.maxBetLocal, Math.floor(localBal))
+                      ).toFixed(2),
+                    }));
+                  }}
                   className="rounded-lg border border-[#303542] bg-[#14171f] py-1.5 text-[11px] font-semibold text-[#cbd5e1] hover:text-white cursor-pointer disabled:opacity-40"
                 >
                   Max
@@ -917,7 +936,7 @@ export function CrashSimulatorPanel({
                 className="flex flex-col items-center justify-center rounded-2xl bg-[#22c55e] px-3 py-2 text-[#06200d] shadow-lg hover:bg-[#4ade80] cursor-pointer disabled:opacity-70"
               >
                 <span className="font-mono text-base font-extrabold tabular-nums">
-                  KES {formatKes(bet.amount * multiplier)}
+                  {formatMoney(bet.amount * multiplier, country)}
                 </span>
                 <span className="text-xs font-bold">Cash Out</span>
               </button>
@@ -930,7 +949,11 @@ export function CrashSimulatorPanel({
               >
                 <span className="text-base font-bold">Cancel</span>
                 <span className="text-[11px] text-white/90">
-                  {draft.queuedNextRound ? 'Queued' : `KES ${formatKes(bet?.amount ?? stakeNum)}`}
+                  {draft.queuedNextRound
+                    ? 'Queued'
+                    : bet
+                    ? formatMoney(bet.amount, country)
+                    : formatDirectLocalMoney(stakeNum, country)}
                 </span>
               </button>
             ) : (
@@ -941,7 +964,7 @@ export function CrashSimulatorPanel({
                 className="flex flex-col items-center justify-center rounded-2xl bg-[#f5d018] px-3 py-2 text-[#18181b] shadow-lg hover:bg-[#fde047] cursor-pointer disabled:opacity-70"
               >
                 <span className="font-mono text-base font-extrabold tabular-nums">
-                  {draft.submitting ? 'Placing...' : `KES ${formatKes(stakeNum)}`}
+                  {draft.submitting ? 'Placing...' : formatDirectLocalMoney(stakeNum, country)}
                 </span>
                 <span className="text-xs font-bold">Bet</span>
               </button>
@@ -1109,6 +1132,7 @@ export function CrashSimulatorPanel({
 
           <LiveBetsBoard
             theme="jetx"
+            country={country}
             roundNumber={roundNumber}
             roomStatus={roomStatus}
             multiplier={multiplier}
@@ -1203,24 +1227,26 @@ export function CrashSimulatorPanel({
             </button>
           </div>
 
-          {/* Bottom Row: Stake (KES) Stepper | Quick Stake 10 50 100 | Yellow PLAY */}
+          {/* Bottom Row: Stake Stepper | Quick Stake | Yellow PLAY */}
           <div className="mt-3 grid grid-cols-[1fr_auto_84px] items-center gap-2.5">
             <div>
-              <p className="mb-1 text-[11px] font-semibold text-[#cbd5ff]">Stake (KES)</p>
+              <p className="mb-1 text-[11px] font-semibold text-[#cbd5ff]">
+                Stake ({currencyCode})
+              </p>
               <div className="flex h-10 items-center justify-between rounded-xl border border-[#2d48b0] bg-[#0f1c4f] px-1.5">
                 <button
                   type="button"
                   aria-label={`Decrease B! Crash stake ${slot}`}
                   disabled={inputsDisabled}
-                  onClick={() => adjustStake(slot, -10)}
+                  onClick={() => adjustStake(slot, -countryCfg.betStep)}
                   className="flex h-7 w-7 items-center justify-center rounded-full bg-[#1a2e7d] text-white hover:bg-[#243ea1] cursor-pointer disabled:opacity-40"
                 >
                   <Minus className="h-3.5 w-3.5" aria-hidden="true" />
                 </button>
                 <input
                   type="number"
-                  min={1}
-                  max={100000}
+                  min={countryCfg.minBetLocal}
+                  max={countryCfg.maxBetLocal}
                   disabled={inputsDisabled}
                   value={draft.stakeAmount}
                   onChange={(e) =>
@@ -1232,7 +1258,7 @@ export function CrashSimulatorPanel({
                   type="button"
                   aria-label={`Increase B! Crash stake ${slot}`}
                   disabled={inputsDisabled}
-                  onClick={() => adjustStake(slot, 10)}
+                  onClick={() => adjustStake(slot, countryCfg.betStep)}
                   className="flex h-7 w-7 items-center justify-center rounded-full bg-[#1a2e7d] text-white hover:bg-[#243ea1] cursor-pointer disabled:opacity-40"
                 >
                   <Plus className="h-3.5 w-3.5" aria-hidden="true" />
@@ -1243,7 +1269,7 @@ export function CrashSimulatorPanel({
             <div>
               <p className="mb-1 text-[11px] font-semibold text-[#cbd5ff]">Quick Stake</p>
               <div className="flex h-10 items-center divide-x divide-[#2c47ad] rounded-xl border border-[#2d48b0] bg-[#13225e]">
-                {BCRASH_PRESETS.map((preset) => (
+                {countryCfg.bcrashPresets.map((preset) => (
                   <button
                     key={preset}
                     type="button"
@@ -1268,7 +1294,7 @@ export function CrashSimulatorPanel({
               >
                 <span className="text-xs font-black uppercase">CASH OUT</span>
                 <span className="font-mono text-[11px] font-extrabold tabular-nums">
-                  {formatKes(bet.amount * multiplier)}
+                  {formatLocalNumber(bet.amount * multiplier, country)}
                 </span>
               </button>
             ) : (isBetting && isActiveBet) || draft.queuedNextRound ? (
@@ -1385,6 +1411,7 @@ export function CrashSimulatorPanel({
 
           <LiveBetsBoard
             theme="b-crash"
+            country={country}
             roundNumber={roundNumber}
             roomStatus={roomStatus}
             multiplier={multiplier}
@@ -1434,13 +1461,13 @@ export function CrashSimulatorPanel({
             <div className="flex items-center gap-2">
               <div className="flex flex-1 items-center gap-2 rounded-xl border border-[#2b3a73] bg-[#0f1530] px-3 py-2">
                 <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-[#fde047] to-[#ca8a04] text-[10px] font-black text-[#422006]">
-                  K
+                  {currencyCode.slice(0, 1)}
                 </span>
-                <span className="text-xs font-bold text-[#cbd5e1]">KES</span>
+                <span className="text-xs font-bold text-[#cbd5e1]">{currencyCode}</span>
                 <input
                   type="number"
-                  min={1}
-                  max={100000}
+                  min={countryCfg.minBetLocal}
+                  max={countryCfg.maxBetLocal}
                   disabled={inputsDisabled}
                   value={draft.stakeAmount}
                   onChange={(e) =>
@@ -1539,7 +1566,7 @@ export function CrashSimulatorPanel({
               onClick={() => triggerSlipAction(slot)}
               className="w-full rounded-xl bg-[#f59e0b] py-3 text-sm font-extrabold text-[#111827] shadow-lg hover:bg-[#fbbf24] cursor-pointer disabled:opacity-70"
             >
-              Cash Out · KES {formatKes(bet.amount * multiplier)}
+              Cash Out · {formatMoney(bet.amount * multiplier, country)}
             </button>
           ) : (isBetting && isActiveBet) || draft.queuedNextRound ? (
             <button
@@ -1695,12 +1722,16 @@ export function CrashSimulatorPanel({
                 </button>
                 {copiedRoundId && <span className="text-[#22c55e]">Copied</span>}
               </div>
-              <p className="font-mono text-[10px]">Stake Limits: KES 10 - 100,000</p>
+              <p className="font-mono text-[10px]">
+                Stake Limits: {currencyCode} {countryCfg.minBetLocal} -{' '}
+                {countryCfg.maxBetLocal.toLocaleString('en-US')}
+              </p>
             </div>
 
             <div className="text-right font-mono tabular-nums">
               <p className="text-[#94a3b8]">
-                Total Bet: <span className="font-bold text-white">KES {formatKes(myTotalStaked)}</span>
+                Total Bet:{' '}
+                <span className="font-bold text-white">{formatMoney(myTotalStaked, country)}</span>
               </p>
               {isLoggedIn ? (
                 <p className="text-[#94a3b8]">
@@ -1717,6 +1748,7 @@ export function CrashSimulatorPanel({
 
           <LiveBetsBoard
             theme="comet-crash"
+            country={country}
             roundNumber={roundNumber}
             roomStatus={roomStatus}
             multiplier={multiplier}
@@ -1859,15 +1891,15 @@ export function CrashSimulatorPanel({
                     type="button"
                     aria-label={`Decrease betslip ${slot} stake`}
                     disabled={inputsDisabled}
-                    onClick={() => adjustStake(slot, -10)}
+                    onClick={() => adjustStake(slot, -countryCfg.betStep)}
                     className="flex h-7 w-7 items-center justify-center rounded-full border border-[#3a3e4a] text-[#cbd5e1] hover:border-white hover:text-white cursor-pointer disabled:opacity-40"
                   >
                     <Minus className="h-3.5 w-3.5" aria-hidden="true" />
                   </button>
                   <input
                     type="number"
-                    min={1}
-                    max={100000}
+                    min={countryCfg.minBetLocal}
+                    max={countryCfg.maxBetLocal}
                     step="1"
                     aria-label={`Betslip ${slot} stake amount`}
                     disabled={inputsDisabled}
@@ -1881,7 +1913,7 @@ export function CrashSimulatorPanel({
                     type="button"
                     aria-label={`Increase betslip ${slot} stake`}
                     disabled={inputsDisabled}
-                    onClick={() => adjustStake(slot, 10)}
+                    onClick={() => adjustStake(slot, countryCfg.betStep)}
                     className="flex h-7 w-7 items-center justify-center rounded-full border border-[#3a3e4a] text-[#cbd5e1] hover:border-white hover:text-white cursor-pointer disabled:opacity-40"
                   >
                     <Plus className="h-3.5 w-3.5" aria-hidden="true" />
@@ -1889,7 +1921,7 @@ export function CrashSimulatorPanel({
                 </div>
 
                 <div className="grid grid-cols-2 gap-1.5">
-                  {AVIATOR_PRESETS.map((preset) => (
+                  {countryCfg.aviatorPresets.map((preset) => (
                     <button
                       key={preset}
                       type="button"
@@ -1914,7 +1946,7 @@ export function CrashSimulatorPanel({
                 >
                   <span className="text-base font-bold leading-tight">Cash Out</span>
                   <span className="mt-0.5 font-mono text-sm font-bold tabular-nums">
-                    {formatKes(bet.amount * multiplier)} KES
+                    {formatLocalNumber(bet.amount * multiplier, country)} {currencyCode}
                   </span>
                 </button>
               ) : (isBettingPhase && isActiveBet) || draft.queuedNextRound ? (
@@ -1928,7 +1960,9 @@ export function CrashSimulatorPanel({
                   <span className="mt-0.5 text-[11px] font-medium text-white/90">
                     {draft.queuedNextRound
                       ? 'Waiting for next round'
-                      : `${formatKes(bet?.amount ?? stakeNum)} KES`}
+                      : bet
+                      ? `${formatLocalNumber(bet.amount, country)} ${currencyCode}`
+                      : `${formatKes(stakeNum)} ${currencyCode}`}
                   </span>
                 </button>
               ) : (
@@ -1942,7 +1976,7 @@ export function CrashSimulatorPanel({
                     {draft.submitting ? 'Placing...' : 'Bet'}
                   </span>
                   <span className="mt-0.5 font-mono text-sm font-semibold tabular-nums">
-                    {formatKes(stakeNum)} <span className="text-xs font-medium">KES</span>
+                    {formatKes(stakeNum)} <span className="text-xs font-medium">{currencyCode}</span>
                   </span>
                 </button>
               )}
@@ -2300,6 +2334,7 @@ export function CrashSimulatorPanel({
 
         <LiveBetsBoard
           theme="aviator"
+          country={country}
           roundNumber={roundNumber}
           roomStatus={roomStatus}
           multiplier={multiplier}

@@ -16,9 +16,13 @@ import {
   Volume2,
   X,
 } from 'lucide-react';
-import { getCountryConfig } from '../../lib/countries';
+import {
+  formatDirectLocalMoney,
+  formatLocalNumber,
+  formatMoney,
+  getCountryConfig,
+} from '../../lib/countries';
 import { AccountMode, CountryOption, WalletTransaction } from '../../types';
-import { formatKes } from './LiveBetsBoard';
 
 export type AvatarId =
   | 'bills'
@@ -146,7 +150,9 @@ export function CrashHamburgerMenu({
   accountMode = 'demo',
   country = 'Kenya',
 }: CrashHamburgerMenuProps) {
-  const currency = getCountryConfig(country).currency;
+  const countryCfg = getCountryConfig(country);
+  const currency = countryCfg.currency;
+  const presetAmount = countryCfg.defaultSportsStake;
   const [activeModal, setActiveModal] = useState<ActiveMenuModal>(null);
   const [seedDraft, setSeedDraft] = useState(clientSeed);
   const [freeBetClaimed, setFreeBetClaimed] = useState(false);
@@ -419,10 +425,11 @@ export function CrashHamburgerMenu({
                             : 'DEMO PRACTICE PRESET'}
                         </p>
                         <p className="mt-0.5 text-lg font-black text-white">
-                          {currency} 100.00
+                          {formatDirectLocalMoney(presetAmount, country)}
                         </p>
                         <p className="text-[11px] text-[#9ca3af]">
-                          Pre-fill Slip 1 in {gameTitle} with a {currency} 100 stake.
+                          Pre-fill Slip 1 in {gameTitle} with a{' '}
+                          {formatDirectLocalMoney(presetAmount, country)} stake.
                         </p>
                       </div>
                       <Star className="h-7 w-7 text-[#facc15]" aria-hidden="true" />
@@ -430,14 +437,14 @@ export function CrashHamburgerMenu({
                     <button
                       type="button"
                       onClick={() => {
-                        onApplyFreeBet(100);
+                        onApplyFreeBet(presetAmount);
                         setFreeBetClaimed(true);
                         setActiveModal(null);
                       }}
                       className="mt-3 w-full rounded-xl bg-[#28b809] py-2 text-xs font-bold text-white hover:bg-[#2fd10e] cursor-pointer"
                     >
                       {freeBetClaimed
-                        ? `Apply ${currency} 100 Stake Again`
+                        ? `Apply ${formatDirectLocalMoney(presetAmount, country)} Stake Again`
                         : 'Use in Betslip 1'}
                     </button>
                   </div>
@@ -470,7 +477,9 @@ export function CrashHamburgerMenu({
                                 : 'text-[#facc15]'
                             }`}
                           >
-                            {tx.amount >= 0 ? `+${formatKes(tx.amount)}` : formatKes(tx.amount)}{' '}
+                            {tx.amount >= 0
+                              ? `+${formatLocalNumber(tx.amount, country)}`
+                              : formatLocalNumber(tx.amount, country)}{' '}
                             {currency}
                           </p>
                           <p className="text-[10px] text-[#9ca3af]">{tx.status}</p>
@@ -485,11 +494,15 @@ export function CrashHamburgerMenu({
                 <div className="divide-y divide-[#2b2f3a] rounded-xl border border-[#2c303a] bg-[#13151b]">
                   <div className="flex justify-between px-3.5 py-2.5">
                     <span className="text-[#9ca3af]">Minimum Bet</span>
-                    <span className="font-mono font-bold text-white">{currency} 10.00</span>
+                    <span className="font-mono font-bold text-white">
+                      {formatDirectLocalMoney(countryCfg.minBetLocal, country)}
+                    </span>
                   </div>
                   <div className="flex justify-between px-3.5 py-2.5">
                     <span className="text-[#9ca3af]">Maximum Bet (per Slip)</span>
-                    <span className="font-mono font-bold text-white">{currency} 100,000.00</span>
+                    <span className="font-mono font-bold text-white">
+                      {formatDirectLocalMoney(countryCfg.maxBetLocal, country)}
+                    </span>
                   </div>
                   <div className="flex justify-between px-3.5 py-2.5">
                     <span className="text-[#9ca3af]">Auto Cashout Range</span>
@@ -497,7 +510,9 @@ export function CrashHamburgerMenu({
                   </div>
                   <div className="flex justify-between px-3.5 py-2.5">
                     <span className="text-[#9ca3af]">Max Win Per Bet</span>
-                    <span className="font-mono font-bold text-[#28c83c]">{currency} 1,000,000.00</span>
+                    <span className="font-mono font-bold text-[#28c83c]">
+                      {formatMoney(1000000, country)}
+                    </span>
                   </div>
                 </div>
               )}

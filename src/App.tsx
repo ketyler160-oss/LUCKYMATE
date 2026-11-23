@@ -39,7 +39,9 @@ import {
   verifyPaystackWithdraw,
 } from './lib/api';
 import {
+  formatDirectLocalMoney,
   formatMoney,
+  getCountryConfig,
   loadStoredCountry,
   saveStoredCountry,
 } from './lib/countries';
@@ -123,7 +125,9 @@ export default function App() {
     text: string;
   } | null>(null);
 
-  const [mobileSlipStake, setMobileSlipStake] = useState('100');
+  const [mobileSlipStake, setMobileSlipStake] = useState(() =>
+    String(getCountryConfig(loadStoredCountry()).defaultSportsStake)
+  );
   const [mobileSlipMsg, setMobileSlipMsg] = useState<{ ok: boolean; text: string } | null>(null);
 
   const [showSplash, setShowSplash] = useState(true);
@@ -196,7 +200,10 @@ export default function App() {
   countryRef.current = country;
 
   const handleSelectCountry = useCallback((nextCountry: CountryOption) => {
+    countryRef.current = nextCountry;
     setCountry(nextCountry);
+    setMobileSlipStake(String(getCountryConfig(nextCountry).defaultSportsStake));
+    setMobileSlipMsg(null);
     saveStoredCountry(nextCountry);
     setAccountCountry(nextCountry).catch(() => {});
   }, []);
@@ -660,7 +667,7 @@ export default function App() {
 
   const handleSubmitDemoSlip = async (stake: number) => {
     try {
-      const res = await submitDemoSlip(stake, selectedPicks, accountMode);
+      const res = await submitDemoSlip(stake, selectedPicks, accountMode, countryRef.current);
       hydrateWalletFields(res);
       setSelectedPicks([]);
       return { ok: true, message: res.message };
@@ -909,26 +916,57 @@ export default function App() {
                     </div>
                   ))}
                 </div>
-                <div className="mt-3 flex items-center gap-2">
-                  <input
-                    type="number"
-                    min={1}
-                    max={100000}
-                    value={mobileSlipStake}
-                    onChange={(e) => setMobileSlipStake(e.target.value)}
-                    className="min-h-[42px] w-32 rounded-lg border border-[#19534e] bg-[#071e1e] px-3 py-2 font-mono text-sm text-white tabular-nums"
-                  />
-                  <button
-                    type="button"
-                    onClick={async () => {
-                      const res = await handleSubmitDemoSlip(Number(mobileSlipStake) || 0);
-                      setMobileSlipMsg({ ok: res.ok, text: res.message });
-                    }}
-                    className="min-h-[42px] flex-1 rounded-lg bg-[#f6d663] px-4 py-2 text-sm font-extrabold text-[#111c17] cursor-pointer"
-                  >
-                    Place Demo Bet ({combinedOdds.toFixed(2)})
-                  </button>
-                </div>
+                {(() => {
+                  const slipCountryCfg = getCountryConfig(country);
+                  const mobileStakeNum = Number(mobileSlipStake) || 0;
+                  return (
+                    <div className="mt-3 space-y-2.5">
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        {slipCountryCfg.quickSportsStakes.map((preset) => (
+                          <button
+                            key={preset}
+                            type="button"
+                            onClick={() => setMobileSlipStake(String(preset))}
+                            className="rounded-md border border-[#19534e] bg-[#071e1e] px-2.5 py-1 font-mono text-[11px] font-bold text-[#c9d7e8] hover:border-[#2cd4a3] hover:text-white cursor-pointer tabular-nums"
+                          >
+                            {slipCountryCfg.currency} {preset}
+                          </button>
+                        ))}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <div className="flex min-h-[42px] w-36 items-center rounded-lg border border-[#19534e] bg-[#071e1e] overflow-hidden">
+                          <span className="border-r border-[#19534e] px-2.5 py-2 font-mono text-xs font-bold text-[#2cd4a3]">
+                            {slipCountryCfg.currency}
+                          </span>
+                          <input
+                            type="number"
+                            min={slipCountryCfg.minBetLocal}
+                            max={slipCountryCfg.maxBetLocal}
+                            value={mobileSlipStake}
+                            onChange={(e) => setMobileSlipStake(e.target.value)}
+                            className="w-full bg-transparent px-2.5 py-2 font-mono text-sm text-white tabular-nums focus:outline-none"
+                          />
+                        </div>
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            const res = await handleSubmitDemoSlip(mobileStakeNum);
+                            setMobileSlipMsg({ ok: res.ok, text: res.message });
+                          }}
+                          className="min-h-[42px] flex-1 rounded-lg bg-[#f6d663] px-4 py-2 text-xs sm:text-sm font-extrabold text-[#111c17] cursor-pointer"
+                        >
+                          Place Bet · {formatDirectLocalMoney(mobileStakeNum, country)}
+                        </button>
+                      </div>
+                      <div className="flex items-center justify-between text-xs text-[#8bb0ab]">
+                        <span>Combined Odds: {combinedOdds.toFixed(2)}</span>
+                        <span className="font-mono font-bold text-[#2cd4a3] tabular-nums">
+                          Est. Return: {formatDirectLocalMoney(mobileStakeNum * combinedOdds, country)}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })()}
                 {mobileSlipMsg && (
                   <p
                     className={`mt-2 text-xs ${

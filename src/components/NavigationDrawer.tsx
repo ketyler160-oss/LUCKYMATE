@@ -19,7 +19,9 @@ import {
   X,
   Zap,
 } from 'lucide-react';
+import { COUNTRIES, COUNTRY_ORDER } from '../lib/countries';
 import { CountryOption, CrashGameId, TopCategoryTab } from '../types';
+import { CountryFlag } from './BrandVisuals';
 
 interface NavigationDrawerProps {
   open: boolean;
@@ -27,6 +29,7 @@ interface NavigationDrawerProps {
   theme: 'dark' | 'light';
   dataSaver: boolean;
   onClose: () => void;
+  onSelectCountry: (country: CountryOption) => void;
   onSelectCategory: (tab: TopCategoryTab) => void;
   onOpenCrashGame: (gameId: CrashGameId) => void;
   onOpenAviator: () => void;
@@ -39,9 +42,11 @@ interface NavigationDrawerProps {
 
 export function NavigationDrawer({
   open,
+  country,
   theme,
   dataSaver,
   onClose,
+  onSelectCountry,
   onSelectCategory,
   onOpenCrashGame,
   onOpenAviator,
@@ -174,8 +179,37 @@ export function NavigationDrawer({
           <p className="text-xs text-[#94a3b8]">Customise your experience</p>
         </div>
 
-        {/* Preferences Card: Display + Data Saver */}
+        {/* Preferences Card: Country & Currency + Display + Data Saver */}
         <div className="lm-drawer-card mt-2.5 rounded-2xl border border-[#232f40] bg-[#1a2330] p-4 space-y-4">
+          <div>
+            <p className="text-sm font-bold text-white lm-drawer-title">Country &amp; Currency</p>
+            <p className="text-xs text-[#94a3b8]">Switch betting currency instantly</p>
+            <div className="mt-2 grid grid-cols-3 gap-1.5">
+              {COUNTRY_ORDER.map((c) => {
+                const item = COUNTRIES[c];
+                const selected = c === country;
+                return (
+                  <button
+                    key={c}
+                    type="button"
+                    onClick={() => onSelectCountry(c)}
+                    className={`flex flex-col items-center gap-1 rounded-xl border px-2 py-2 text-center transition-colors cursor-pointer ${
+                      selected
+                        ? 'border-[#7bc114] bg-[#7bc114]/15 text-white'
+                        : 'border-[#2b394d] bg-[#121923] text-[#cbd5e1] hover:border-[#415673]'
+                    }`}
+                  >
+                    <CountryFlag country={c} className="h-3.5 w-5 rounded-[2px]" />
+                    <span className="w-full truncate text-[10px] font-bold">{item.label}</span>
+                    <span className="font-mono text-[10px] font-extrabold text-[#98e02a]">
+                      {item.currency}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
           <div className="flex items-center justify-between gap-3">
             <div className="min-w-0">
               <p className="text-sm font-bold text-white lm-drawer-title">Display</p>

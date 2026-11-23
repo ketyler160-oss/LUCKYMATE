@@ -11,6 +11,16 @@ export interface CountryConfig {
   phonePlaceholder: string;
   payMethod: string;
   quickDepositPresets: number[];
+  defaultSportsStake: number;
+  defaultCrashStake: number;
+  minBetLocal: number;
+  maxBetLocal: number;
+  betStep: number;
+  quickSportsStakes: number[];
+  aviatorPresets: number[];
+  jetxPresets: number[];
+  bcrashPresets: number[];
+  otherCrashPresets: number[];
 }
 
 export const BASE_KES_PER_USD = 130;
@@ -56,6 +66,16 @@ export const COUNTRIES: Record<CountryOption, CountryConfig> = {
     phonePlaceholder: 'e.g. 0712 234567',
     payMethod: 'M-PESA',
     quickDepositPresets: [780, 1300, 3250, 6500],
+    defaultSportsStake: 100,
+    defaultCrashStake: 10,
+    minBetLocal: 1,
+    maxBetLocal: 100000,
+    betStep: 10,
+    quickSportsStakes: [50, 100, 500, 1000],
+    aviatorPresets: [100, 200, 500, 10000],
+    jetxPresets: [20, 50, 100],
+    bcrashPresets: [10, 50, 100],
+    otherCrashPresets: [50, 200, 1000],
   },
   Ghana: {
     code: 'Ghana',
@@ -68,6 +88,16 @@ export const COUNTRIES: Record<CountryOption, CountryConfig> = {
     phonePlaceholder: 'e.g. 024 123 4567',
     payMethod: 'MTN MoMo / Telecel',
     quickDepositPresets: [96, 160, 400, 800],
+    defaultSportsStake: 10,
+    defaultCrashStake: 5,
+    minBetLocal: 1,
+    maxBetLocal: 15000,
+    betStep: 1,
+    quickSportsStakes: [5, 10, 50, 100],
+    aviatorPresets: [5, 10, 50, 500],
+    jetxPresets: [2, 5, 20],
+    bcrashPresets: [1, 5, 20],
+    otherCrashPresets: [5, 20, 100],
   },
   "Côte d'Ivoire": {
     code: "Côte d'Ivoire",
@@ -80,6 +110,16 @@ export const COUNTRIES: Record<CountryOption, CountryConfig> = {
     phonePlaceholder: 'e.g. 07 01 23 45 67',
     payMethod: 'Orange / MTN Money',
     quickDepositPresets: [3600, 6000, 15000, 30000],
+    defaultSportsStake: 500,
+    defaultCrashStake: 100,
+    minBetLocal: 50,
+    maxBetLocal: 500000,
+    betStep: 100,
+    quickSportsStakes: [250, 500, 2500, 5000],
+    aviatorPresets: [500, 1000, 2500, 50000],
+    jetxPresets: [100, 250, 500],
+    bcrashPresets: [100, 500, 1000],
+    otherCrashPresets: [250, 1000, 5000],
   },
 };
 
@@ -112,6 +152,11 @@ export function getCountryConfig(country: CountryOption): CountryConfig {
 export function convertBaseToLocal(baseKesAmount: number, country: CountryOption): number {
   const { usdRate } = getCountryConfig(country);
   return Number(((baseKesAmount / BASE_KES_PER_USD) * usdRate).toFixed(2));
+}
+
+export function convertLocalToBase(localAmount: number, country: CountryOption): number {
+  const { usdRate } = getCountryConfig(country);
+  return Number(((localAmount / usdRate) * BASE_KES_PER_USD).toFixed(2));
 }
 
 export function convertBaseToUsd(baseKesAmount: number): number {

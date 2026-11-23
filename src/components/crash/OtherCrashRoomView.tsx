@@ -16,10 +16,10 @@ import {
   Waves,
   Zap,
 } from 'lucide-react';
+import { formatDirectLocalMoney, formatMoney, getCountryConfig } from '../../lib/countries';
 import { AccountMode, CountryOption, CrashGameId, RoomBetPublic, RoomRoundPublic } from '../../types';
 import { CrashDualBalanceBar, HeaderTopBalanceBadge } from './CrashDualBalanceBar';
 import {
-  formatKes,
   getMultiplierPillBg,
   LiveBetsBoard,
   LiveCashoutNotice,
@@ -328,6 +328,7 @@ export function OtherCrashRoomView({
   renderRoomSwitcherPopover,
 }: OtherCrashRoomViewProps) {
   const cfg = THEME_CONFIGS[gameId];
+  const countryCfg = getCountryConfig(country);
 
   const renderSlip = (slot: 1 | 2) => {
     const draft = slot === 1 ? slip1Draft : slip2Draft;
@@ -446,15 +447,15 @@ export function OtherCrashRoomView({
                 type="button"
                 aria-label={`Decrease ${cfg.title} slip ${slot} stake`}
                 disabled={inputsDisabled}
-                onClick={() => onAdjustStake(slot, -25)}
+                onClick={() => onAdjustStake(slot, -countryCfg.betStep)}
                 className="flex h-7 w-7 items-center justify-center rounded-lg bg-white/10 text-white hover:bg-white/20 cursor-pointer disabled:opacity-40"
               >
                 <Minus className="h-3.5 w-3.5" aria-hidden="true" />
               </button>
               <input
                 type="number"
-                min={1}
-                max={100000}
+                min={countryCfg.minBetLocal}
+                max={countryCfg.maxBetLocal}
                 aria-label={`${cfg.title} slip ${slot} stake`}
                 disabled={inputsDisabled}
                 value={draft.stakeAmount}
@@ -467,7 +468,7 @@ export function OtherCrashRoomView({
                 type="button"
                 aria-label={`Increase ${cfg.title} slip ${slot} stake`}
                 disabled={inputsDisabled}
-                onClick={() => onAdjustStake(slot, 25)}
+                onClick={() => onAdjustStake(slot, countryCfg.betStep)}
                 className="flex h-7 w-7 items-center justify-center rounded-lg bg-white/10 text-white hover:bg-white/20 cursor-pointer disabled:opacity-40"
               >
                 <Plus className="h-3.5 w-3.5" aria-hidden="true" />
@@ -491,7 +492,7 @@ export function OtherCrashRoomView({
               >
                 2×
               </button>
-              {cfg.presets.map((preset) => (
+              {countryCfg.otherCrashPresets.map((preset) => (
                 <button
                   key={preset}
                   type="button"
@@ -516,7 +517,7 @@ export function OtherCrashRoomView({
             >
               <span className="text-xs uppercase tracking-wider">{cfg.cashoutLabel}</span>
               <span className="mt-0.5 font-mono text-sm font-black tabular-nums">
-                KES {formatKes(bet.amount * multiplier)}
+                {formatMoney(bet.amount * multiplier, country)}
               </span>
             </button>
           ) : (isBetting && isActiveBet) || draft.queuedNextRound ? (
@@ -528,7 +529,11 @@ export function OtherCrashRoomView({
             >
               <span className="text-sm uppercase tracking-wide">CANCEL</span>
               <span className="mt-0.5 font-mono text-[11px] opacity-90">
-                {draft.queuedNextRound ? 'Queued' : `KES ${formatKes(bet?.amount ?? stakeNum)}`}
+                {draft.queuedNextRound
+                  ? 'Queued'
+                  : bet
+                  ? formatMoney(bet.amount, country)
+                  : formatDirectLocalMoney(stakeNum, country)}
               </span>
             </button>
           ) : (
@@ -542,7 +547,7 @@ export function OtherCrashRoomView({
                 {draft.submitting ? 'PLACING...' : isFlying ? cfg.queueLabel : cfg.betLabel}
               </span>
               <span className="mt-0.5 font-mono text-xs font-bold tabular-nums opacity-95">
-                KES {formatKes(stakeNum)}
+                {formatDirectLocalMoney(stakeNum, country)}
               </span>
             </button>
           )}
@@ -705,9 +710,10 @@ export function OtherCrashRoomView({
           {renderSlip(2)}
         </div>
 
-        {/* Live Players / Cashout Odds & KES Payout Board */}
+        {/* Live Players / Cashout Odds & Payout Board */}
         <LiveBetsBoard
           theme={gameId}
+          country={country}
           roundNumber={roundNumber}
           roomStatus={roomStatus}
           multiplier={multiplier}

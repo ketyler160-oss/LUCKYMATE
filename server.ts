@@ -165,6 +165,25 @@ function parseSupportedCountry(raw: unknown): SupportedCountry {
   return 'Kenya';
 }
 
+function convertBaseToLocalServer(baseKesAmount: number, country: SupportedCountry): number {
+  const meta = COUNTRY_META[country] ?? COUNTRY_META.Kenya;
+  return Number(((baseKesAmount / BASE_KES_PER_USD) * meta.usdRate).toFixed(2));
+}
+
+function convertLocalToBaseServer(localAmount: number, country: SupportedCountry): number {
+  const meta = COUNTRY_META[country] ?? COUNTRY_META.Kenya;
+  return Number(((localAmount / meta.usdRate) * BASE_KES_PER_USD).toFixed(2));
+}
+
+function formatLocalMoneyServer(baseKesAmount: number, country: SupportedCountry): string {
+  const meta = COUNTRY_META[country] ?? COUNTRY_META.Kenya;
+  const local = convertBaseToLocalServer(baseKesAmount, country);
+  return `${meta.currency} ${local.toLocaleString('en-US', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`;
+}
+
 function normalizePhoneNumber(
   rawPhone: string,
   country: SupportedCountry
@@ -1352,7 +1371,7 @@ function settleBetWin(bet: RoomBetRecord, multiplier: number, automatic: boolean
       tx.status = 'Won';
       tx.odds = roundedMult;
       tx.amount = Number((payout - bet.amount).toFixed(2));
-      tx.detail = `[${mode.toUpperCase()}] Slip ${bet.slot} · Stake: KES ${bet.amount.toFixed(0)} | ${
+      tx.detail = `[${mode.toUpperCase()}] Slip ${bet.slot} · Stake: ${formatLocalMoneyServer(bet.amount, account.country)} | ${
         automatic ? 'Auto' : 'Manual'
       } Cashout @ ${roundedMult.toFixed(2)}x`;
     }
@@ -1472,7 +1491,7 @@ function tickCrashRooms() {
               const tx = account.history.find((t) => t.id === bet.walletTxId);
               if (tx) {
                 tx.status = 'Lost';
-                tx.detail = `Slip ${bet.slot} · Stake: KES ${bet.amount.toFixed(0)} | Crashed @ ${room.crashPoint.toFixed(2)}x`;
+                tx.detail = `Slip ${bet.slot} · Stake: ${formatLocalMoneyServer(bet.amount, account.country)} | Crashed @ ${room.crashPoint.toFixed(2)}x`;
               }
             }
           }
@@ -4814,7 +4833,13 @@ async function startServer() {
   app.post('/api/demo-slip', (req: Request, res: Response) => {
     const { sessionId, account } = resolveRequestAccount(req, res);
     const body = req.body ?? {};
-    const stake = Number(body.stake);
+    const country = body.country ? parseSupportedCountry(body.country) : account.country;
+    if (body.country) {
+      account.country = country;
+    }
+    const meta = COUNTRY_META[country];
+    const cur = meta.currency;
+    const localStake = Number(body.stake);
     const picks = Array.isArray(body.picks) ? body.picks : [];
     const walletMode: 'demo' | 'real' =
       body.walletMode === 'real' || body.walletMode === 'demo'
@@ -4838,21 +4863,23 @@ async function startServer() {
       return;
     }
 
-    if (!Number.isFinite(stake) || stake <= 0 || stake > 100000) {
+    const stakeBase = convertLocalToBaseServer(localStake, country);
+    if (!Number.isFinite(localStake) || localStake <= 0 || stakeBase > 150000) {
       res.status(400).json({
         success: false,
-        message: 'Enter a valid stake amount.',
+        message: `Enter a valid stake amount in ${cur}.`,
       });
       return;
     }
 
-    if (stake > getAccountBalance(account, walletMode)) {
+    const availableBase = getAccountBalance(account, walletMode);
+    if (stakeBase > availableBase + 0.01) {
       res.status(400).json({
         success: false,
         message:
           walletMode === 'real'
-            ? 'Insufficient Real balance. Make a payment/deposit first.'
-            : 'Insufficient Demo balance. Reset or switch account.',
+            ? `Insufficient Real balance (${formatLocalMoneyServer(availableBase, country)}). Make a payment/deposit first.`
+            : `Insufficient Demo balance (${formatLocalMoneyServer(availableBase, country)}). Reset or switch account.`,
       });
       return;
     }
@@ -4862,27 +4889,28 @@ async function startServer() {
       return acc * (Number.isFinite(oddsVal) && oddsVal > 1 ? oddsVal : 1);
     }, 1);
 
-    const roundedStake = Number(stake.toFixed(2));
-    const potentialReturn = Number((roundedStake * combinedOdds).toFixed(2));
+    const roundedLocalStake = Number(localStake.toFixed(2));
+    const roundedStakeBase = Math.min(availableBase, Number(stakeBase.toFixed(2)));
+    const potentialReturnLocal = Number((roundedLocalStake * combinedOdds).toFixed(2));
+    const potentialReturnBase = Number((roundedStakeBase * combinedOdds).toFixed(2));
     const matchTitle =
       picks.length === 1
         ? String(picks[0]?.matchLabel || 'Single Match Pick')
         : `Accumulator (${picks.length} matches)`;
 
-    const cur = COUNTRY_META[account.country].currency;
-    adjustAccountBalance(account, walletMode, -roundedStake);
-    account.totalWagered = Number((account.totalWagered + roundedStake).toFixed(2));
+    adjustAccountBalance(account, walletMode, -roundedStakeBase);
+    account.totalWagered = Number((account.totalWagered + roundedStakeBase).toFixed(2));
     account.gamesPlayed += 1;
     account.updatedAt = Date.now();
     account.history.unshift({
       id: crypto.randomUUID(),
       type: 'bet_pending',
-      amount: -roundedStake,
-      stake: roundedStake,
+      amount: -roundedStakeBase,
+      stake: roundedStakeBase,
       odds: Number(combinedOdds.toFixed(2)),
       status: 'Pending',
       label: matchTitle,
-      detail: `[${walletMode.toUpperCase()}] Stake: ${cur} ${roundedStake.toFixed(0)} | Est. ${cur} ${potentialReturn.toFixed(0)}`,
+      detail: `[${walletMode.toUpperCase()}] Stake: ${cur} ${roundedLocalStake.toFixed(2)} | Est. ${cur} ${potentialReturnLocal.toFixed(2)}`,
       createdAt: new Date().toISOString(),
     });
     account.history = account.history.slice(0, 40);
@@ -4891,15 +4919,14 @@ async function startServer() {
     res.json({
       success: true,
       sessionId,
-      message: `${walletMode === 'real' ? 'Real' : 'Demo'} bet placed: ${cur} ${roundedStake.toFixed(2)} (Est. return ${cur} ${potentialReturn.toFixed(2)}).`,
+      message: `${walletMode === 'real' ? 'Real' : 'Demo'} bet placed: ${cur} ${roundedLocalStake.toFixed(2)} (Est. return ${cur} ${potentialReturnLocal.toFixed(2)}).`,
       ...buildWalletFields(account),
-      potentialReturn,
+      potentialReturn: potentialReturnBase,
     });
   });
 
   app.post('/api/wallet/reset', (req: Request, res: Response) => {
     const { sessionId, account } = resolveRequestAccount(req, res);
-    const cur = COUNTRY_META[account.country].currency;
     account.demoBalance = STARTING_DEMO_BALANCE;
     account.totalWagered = 0;
     account.totalWon = 0;
@@ -4914,7 +4941,7 @@ async function startServer() {
       success: true,
       sessionId,
       ...buildWalletFields(account),
-      message: `Demo balance reset to ${cur} 500.00.`,
+      message: `Demo balance reset to ${formatLocalMoneyServer(STARTING_DEMO_BALANCE, account.country)}.`,
     });
   });
 
@@ -4978,9 +5005,15 @@ async function startServer() {
   app.post('/api/bet', (req: Request, res: Response) => {
     const { sessionId, account } = resolveRequestAccount(req, res);
     const body = req.body ?? {};
+    const country = body.country ? parseSupportedCountry(body.country) : account.country;
+    if (body.country) {
+      account.country = country;
+    }
+    const meta = COUNTRY_META[country];
+    const cur = meta.currency;
     const game = String(body.game ?? '') as CrashGameId;
     const slot: 1 | 2 = Number(body.slot) === 2 ? 2 : 1;
-    const amount = Number(body.amount);
+    const localAmount = Number(body.amount);
     const rawAuto = body.autoCashout;
     const autoCashout =
       rawAuto !== undefined && rawAuto !== null && rawAuto !== '' ? Number(rawAuto) : null;
@@ -5010,8 +5043,12 @@ async function startServer() {
       return;
     }
 
-    if (!Number.isFinite(amount) || amount <= 0 || amount > 100000) {
-      res.status(400).json({ message: 'Enter a bet between 1 and 100,000 KES.' });
+    const amountBase = convertLocalToBaseServer(localAmount, country);
+    const maxLocal = convertBaseToLocalServer(100000, country);
+    if (!Number.isFinite(localAmount) || localAmount <= 0 || amountBase > 150000) {
+      res.status(400).json({
+        message: `Enter a bet between 1 and ${Math.round(maxLocal).toLocaleString('en-US')} ${cur}.`,
+      });
       return;
     }
 
@@ -5031,20 +5068,21 @@ async function startServer() {
       return;
     }
 
-    const roundedAmount = Number(amount.toFixed(2));
+    const roundedLocalAmount = Number(localAmount.toFixed(2));
     const available = getAccountBalance(account, walletMode);
-    if (available < roundedAmount) {
+    if (available + 0.01 < amountBase) {
       res.status(400).json({
         message:
           walletMode === 'real'
-            ? 'Insufficient Real balance (KES 0.00). Please make a deposit first.'
-            : 'Insufficient Demo balance.',
+            ? `Insufficient Real balance (${formatLocalMoneyServer(available, country)}). Please make a deposit first.`
+            : `Insufficient Demo balance (${formatLocalMoneyServer(available, country)}).`,
       });
       return;
     }
 
-    adjustAccountBalance(account, walletMode, -roundedAmount);
-    account.totalWagered = Number((account.totalWagered + roundedAmount).toFixed(2));
+    const roundedAmountBase = Math.min(available, Number(amountBase.toFixed(2)));
+    adjustAccountBalance(account, walletMode, -roundedAmountBase);
+    account.totalWagered = Number((account.totalWagered + roundedAmountBase).toFixed(2));
     account.gamesPlayed += 1;
     account.updatedAt = Date.now();
 
@@ -5052,11 +5090,11 @@ async function startServer() {
     account.history.unshift({
       id: walletTxId,
       type: 'crash_stake',
-      amount: -roundedAmount,
-      stake: roundedAmount,
+      amount: -roundedAmountBase,
+      stake: roundedAmountBase,
       status: 'Pending',
       label: `${CRASH_GAME_NAMES[game]} #${room.roundNumber} (Slip ${slot})`,
-      detail: `[${walletMode.toUpperCase()}] Stake: KES ${roundedAmount.toFixed(0)} | ${
+      detail: `[${walletMode.toUpperCase()}] Stake: ${cur} ${roundedLocalAmount.toFixed(2)} | ${
         autoCashout ? `Auto @ ${autoCashout.toFixed(2)}x` : 'Manual Cashout'
       }`,
       createdAt: new Date().toISOString(),
@@ -5070,7 +5108,7 @@ async function startServer() {
       username: account.username,
       roundId: room.roundId,
       game,
-      amount: roundedAmount,
+      amount: roundedAmountBase,
       autoCashout: autoCashout !== null ? Number(autoCashout.toFixed(2)) : null,
       status: 'active',
       payout: 0,
@@ -5091,7 +5129,7 @@ async function startServer() {
     res.json({
       success: true,
       sessionId,
-      message: `Slip ${slot} ${walletMode} bet accepted for Round #${room.roundNumber}.`,
+      message: `Slip ${slot} ${walletMode} bet accepted (${cur} ${roundedLocalAmount.toFixed(2)}) for Round #${room.roundNumber}.`,
       roundId: room.roundId,
       bet: serializeBetPublic(bet),
       ...buildWalletFields(account),

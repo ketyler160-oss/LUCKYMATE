@@ -616,7 +616,8 @@ export function submitPaystackWithdrawOtp(
 export function submitDemoSlip(
   stake: number,
   picks: SlipPick[],
-  walletMode?: AccountMode
+  walletMode?: AccountMode,
+  country?: CountryOption
 ): Promise<{
   success: boolean;
   message: string;
@@ -624,6 +625,7 @@ export function submitDemoSlip(
   demoBalance: number;
   realBalance: number;
   accountMode: AccountMode;
+  country?: CountryOption;
   playedStats: PlayedStats;
   lastDepositAmount: number;
   lastDepositDate: string;
@@ -632,7 +634,7 @@ export function submitDemoSlip(
 }> {
   return apiFetch('/api/demo-slip', {
     method: 'POST',
-    body: JSON.stringify({ stake, picks, walletMode }),
+    body: JSON.stringify({ stake, picks, walletMode, country }),
   });
 }
 
@@ -649,7 +651,8 @@ export function placeCrashRoomBet(
   slot: 1 | 2,
   amount: number,
   autoCashout: number | null,
-  walletMode?: AccountMode
+  walletMode?: AccountMode,
+  country?: CountryOption
 ): Promise<{
   success: boolean;
   message: string;
@@ -659,6 +662,7 @@ export function placeCrashRoomBet(
   demoBalance: number;
   realBalance: number;
   accountMode: AccountMode;
+  country?: CountryOption;
   playedStats: PlayedStats;
   lastDepositAmount: number;
   lastDepositDate: string;
@@ -666,7 +670,7 @@ export function placeCrashRoomBet(
 }> {
   return apiFetch('/api/bet', {
     method: 'POST',
-    body: JSON.stringify({ game, slot, amount, autoCashout, walletMode }),
+    body: JSON.stringify({ game, slot, amount, autoCashout, walletMode, country }),
   });
 }
 

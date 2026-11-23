@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import {
   Activity,
+  ChevronDown,
   Gift,
   Layers,
   Menu,
@@ -12,8 +13,9 @@ import {
   Wallet,
   X,
 } from 'lucide-react';
-import { formatMoney } from '../lib/countries';
+import { COUNTRIES, COUNTRY_ORDER, formatMoney, getCountryConfig } from '../lib/countries';
 import { AccountMode, CountryOption, CrashGameId, TopCategoryTab } from '../types';
+import { CountryFlag } from './BrandVisuals';
 import { NavigationDrawer } from './NavigationDrawer';
 
 interface SportsHeaderProps {
@@ -58,6 +60,7 @@ export function SportsHeader({
   searchQuery,
   theme,
   dataSaver,
+  onSelectCountry,
   onSelectCategory,
   onOpenCrashGame,
   onOpenAviator,
@@ -75,8 +78,10 @@ export function SportsHeader({
   onResetHome,
 }: SportsHeaderProps) {
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [countryMenuOpen, setCountryMenuOpen] = useState(false);
   const [logoTapCount, setLogoTapCount] = useState(0);
   const [lastLogoTapMs, setLastLogoTapMs] = useState(0);
+  const activeCountryCfg = getCountryConfig(country);
 
   const handleLogoClick = () => {
     const now = Date.now();
@@ -94,13 +99,16 @@ export function SportsHeader({
   return (
     <>
       <header className="sticky top-0 z-30 bg-[#141c27] border-b border-[#202a38]">
-        {/* Row 1: [≡] [LUCKYMATE] ... [Login/Register or Account] [🔍] */}
+        {/* Row 1: [≡] [LUCKYMATE] ... [Country/Currency] [Login/Register or Account] [🔍] */}
         <div className="mx-auto flex h-[48px] max-w-[1440px] items-center justify-between gap-2 px-2.5 sm:px-5">
           <div className="flex items-center gap-1.5 min-w-0">
             <button
               type="button"
               aria-label="Open navigation menu"
-              onClick={() => setDrawerOpen((prev) => !prev)}
+              onClick={() => {
+                setCountryMenuOpen(false);
+                setDrawerOpen((prev) => !prev);
+              }}
               className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-[#e2e8f0] hover:bg-[#1e2938] cursor-pointer"
             >
               {drawerOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
@@ -118,7 +126,66 @@ export function SportsHeader({
             </button>
           </div>
 
-          <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+          <div className="flex items-center gap-1.5 sm:gap-2.5 shrink-0">
+            <div className="relative">
+              <button
+                type="button"
+                aria-label="Select country and currency"
+                aria-expanded={countryMenuOpen}
+                onClick={() => setCountryMenuOpen((prev) => !prev)}
+                className="inline-flex h-8 items-center gap-1.5 rounded-md border border-[#2b3749] bg-[#1a2331] px-2 text-[11px] font-bold text-white hover:border-[#7bc114] cursor-pointer whitespace-nowrap shrink-0"
+              >
+                <CountryFlag country={country} className="h-3.5 w-5 rounded-[2px]" />
+                <span className="font-mono">{activeCountryCfg.currency}</span>
+                <ChevronDown className="h-3 w-3 text-[#94a3b8]" aria-hidden="true" />
+              </button>
+
+              {countryMenuOpen && (
+                <>
+                  <div
+                    className="fixed inset-0 z-40"
+                    onClick={() => setCountryMenuOpen(false)}
+                    aria-hidden="true"
+                  />
+                  <div
+                    role="menu"
+                    aria-label="Country and currency options"
+                    className="absolute right-0 top-10 z-50 w-52 overflow-hidden rounded-xl border border-[#2c3a4e] bg-[#141c27] p-1.5 shadow-2xl"
+                  >
+                    {COUNTRY_ORDER.map((c) => {
+                      const item = COUNTRIES[c];
+                      const active = c === country;
+                      return (
+                        <button
+                          key={c}
+                          type="button"
+                          role="menuitemradio"
+                          aria-checked={active}
+                          onClick={() => {
+                            onSelectCountry(c);
+                            setCountryMenuOpen(false);
+                          }}
+                          className={`flex w-full items-center justify-between gap-2 rounded-lg px-2.5 py-2 text-left text-xs font-bold transition-colors cursor-pointer ${
+                            active
+                              ? 'bg-[#7bc114]/15 text-[#98e02a]'
+                              : 'text-[#e2e8f0] hover:bg-[#1e2938] hover:text-white'
+                          }`}
+                        >
+                          <span className="flex items-center gap-2 min-w-0">
+                            <CountryFlag country={c} className="h-3.5 w-5 rounded-[2px] shrink-0" />
+                            <span className="truncate">{item.label}</span>
+                          </span>
+                          <span className="font-mono text-[11px] font-extrabold">
+                            {item.currency}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </>
+              )}
+            </div>
+
             {demoUser ? (
               <button
                 type="button"
@@ -141,7 +208,7 @@ export function SportsHeader({
                 <button
                   type="button"
                   onClick={() => onOpenAuth('register')}
-                  className="h-8 rounded-md bg-[#7bc114] px-3.5 text-xs sm:text-sm font-bold text-[#0b1404] shadow-sm hover:bg-[#8cd61e] cursor-pointer whitespace-nowrap shrink-0"
+                  className="h-8 rounded-md bg-[#7bc114] px-3 text-xs sm:text-sm font-bold text-[#0b1404] shadow-sm hover:bg-[#8cd61e] cursor-pointer whitespace-nowrap shrink-0"
                 >
                   Register
                 </button>
@@ -355,6 +422,7 @@ export function SportsHeader({
         theme={theme}
         dataSaver={dataSaver}
         onClose={() => setDrawerOpen(false)}
+        onSelectCountry={onSelectCountry}
         onSelectCategory={onSelectCategory}
         onOpenCrashGame={onOpenCrashGame}
         onOpenAviator={onOpenAviator}

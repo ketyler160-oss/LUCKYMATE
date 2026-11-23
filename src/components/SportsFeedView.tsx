@@ -15,7 +15,7 @@ import {
 } from 'lucide-react';
 import { TOP_LEAGUES } from '../data/matches';
 import { fetchOfficialLiveScores } from '../lib/api';
-import { formatMoney, getCountryConfig } from '../lib/countries';
+import { formatDirectLocalMoney, formatMoney, getCountryConfig } from '../lib/countries';
 import {
   buildPopularBetsFromMatches,
   formatKickoffCountdown,
@@ -92,11 +92,17 @@ export function SportsFeedView({
   const [refreshingMatches, setRefreshingMatches] = useState(false);
   const [matchesError, setMatchesError] = useState<string | null>(null);
 
-  const [stakeInput, setStakeInput] = useState('100');
+  const countryCfg = getCountryConfig(country);
+  const [stakeInput, setStakeInput] = useState(() => String(countryCfg.defaultSportsStake));
   const [placing, setPlacing] = useState(false);
   const [slipMsg, setSlipMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [nowMs, setNowMs] = useState(() => Date.now());
   const matchesListRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    setStakeInput(String(getCountryConfig(country).defaultSportsStake));
+    setSlipMsg(null);
+  }, [country]);
 
   useEffect(() => {
     const t = window.setInterval(() => setNowMs(Date.now()), 1000);
@@ -824,22 +830,39 @@ export function SportsFeedView({
                     </div>
                     <div>
                       <label htmlFor="desktop-slip-stake" className="block text-[#8e9bae] mb-1">
-                        Stake ({getCountryConfig(country).currency} base)
+                        Stake ({countryCfg.currency})
                       </label>
-                      <input
-                        id="desktop-slip-stake"
-                        type="number"
-                        min={1}
-                        max={100000}
-                        value={stakeInput}
-                        onChange={(e) => setStakeInput(e.target.value)}
-                        className="min-h-[38px] w-full rounded border border-[#2d3a4d] bg-[#101720] px-3 py-1.5 font-mono text-sm text-white tabular-nums focus:border-[#7bc114] focus:outline-none"
-                      />
+                      <div className="flex items-center rounded border border-[#2d3a4d] bg-[#101720] focus-within:border-[#7bc114]">
+                        <span className="border-r border-[#2d3a4d] px-2.5 py-2 font-mono text-xs font-bold text-[#98e02a]">
+                          {countryCfg.currency}
+                        </span>
+                        <input
+                          id="desktop-slip-stake"
+                          type="number"
+                          min={countryCfg.minBetLocal}
+                          max={countryCfg.maxBetLocal}
+                          value={stakeInput}
+                          onChange={(e) => setStakeInput(e.target.value)}
+                          className="min-h-[38px] w-full bg-transparent px-3 py-1.5 font-mono text-sm text-white tabular-nums focus:outline-none"
+                        />
+                      </div>
+                      <div className="mt-1.5 grid grid-cols-4 gap-1">
+                        {countryCfg.quickSportsStakes.map((preset) => (
+                          <button
+                            key={preset}
+                            type="button"
+                            onClick={() => setStakeInput(String(preset))}
+                            className="rounded border border-[#253141] bg-[#101720] py-1 font-mono text-[11px] font-bold text-[#cbd5e1] hover:border-[#7bc114] hover:text-white cursor-pointer tabular-nums"
+                          >
+                            {preset}
+                          </button>
+                        ))}
+                      </div>
                     </div>
                     <div className="flex justify-between text-[#8e9bae]">
                       <span>Est. Return</span>
                       <span className="font-mono font-bold text-[#7bc114] tabular-nums">
-                        {formatMoney(numericStake * combinedOdds, country)}
+                        {formatDirectLocalMoney(numericStake * combinedOdds, country)}
                       </span>
                     </div>
                     <button
@@ -848,7 +871,9 @@ export function SportsFeedView({
                       onClick={handlePlaceBet}
                       className="min-h-[40px] w-full rounded bg-[#7bc114] px-4 py-2 text-xs font-extrabold text-[#0b1404] cursor-pointer hover:bg-[#8cd61e] disabled:opacity-60"
                     >
-                      {placing ? 'Placing...' : 'Place Bet'}
+                      {placing
+                        ? 'Placing...'
+                        : `Place Bet (${formatDirectLocalMoney(numericStake, country)})`}
                     </button>
                   </div>
                 </div>

@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
-import { RoomBetPublic, RoomRoundPublic } from '../../types';
+import { formatLocalNumber, getCountryConfig } from '../../lib/countries';
+import { CountryOption, RoomBetPublic, RoomRoundPublic } from '../../types';
 
 export interface LiveCashoutNotice {
   betId: string;
@@ -24,6 +25,7 @@ export type LiveBoardTheme =
 
 interface LiveBetsBoardProps {
   theme: LiveBoardTheme;
+  country?: CountryOption;
   roundNumber: number;
   roomStatus: 'betting' | 'running' | 'crashed';
   multiplier: number;
@@ -72,6 +74,7 @@ function getAvatarBg(name: string): string {
 
 export function LiveBetsBoard({
   theme,
+  country = 'Kenya',
   roundNumber,
   roomStatus,
   multiplier,
@@ -83,6 +86,7 @@ export function LiveBetsBoard({
   recentRounds,
   liveCashouts,
 }: LiveBetsBoardProps) {
+  const currencyCode = getCountryConfig(country).currency;
   const [tab, setTab] = useState<'all' | 'previous' | 'top' | 'multipliers'>('all');
 
   const totalRoundBets = activeBets.length;
@@ -322,15 +326,15 @@ export function LiveBetsBoard({
         <div className="flex items-center gap-4 text-right">
           <div>
             <p className="font-mono text-xs font-bold text-[#cbd5e1] tabular-nums">
-              {formatKes(tabTotalStaked)}
+              {formatLocalNumber(tabTotalStaked, country)}
             </p>
-            <p className="text-[10px] text-[#9ca3af]">Staked KES</p>
+            <p className="text-[10px] text-[#9ca3af]">Staked {currencyCode}</p>
           </div>
           <div>
             <p className="font-mono text-sm font-bold text-[#28c83c] tabular-nums">
-              {formatKes(tabTotalWin)}
+              {formatLocalNumber(tabTotalWin, country)}
             </p>
-            <p className="text-[10px] text-[#9ca3af]">Cashed Out KES</p>
+            <p className="text-[10px] text-[#9ca3af]">Cashed Out {currencyCode}</p>
           </div>
         </div>
       </div>
@@ -352,7 +356,7 @@ export function LiveBetsBoard({
                 {c.multiplier.toFixed(2)}x
               </span>
               <span className="font-mono font-bold text-[#28c83c] tabular-nums">
-                +{formatKes(c.payout)} KES
+                +{formatLocalNumber(c.payout, country)} {currencyCode}
               </span>
             </div>
           ))}
@@ -401,9 +405,9 @@ export function LiveBetsBoard({
           {/* Column Headers */}
           <div className="mt-2.5 grid grid-cols-[minmax(0,1.4fr)_minmax(0,0.85fr)_minmax(0,0.7fr)_minmax(0,1fr)] items-center gap-2 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-[#8e95a5]">
             <span>Player</span>
-            <span className="text-right">Bet KES</span>
+            <span className="text-right">Bet {currencyCode}</span>
             <span className="text-center">Odds</span>
-            <span className="text-right">Cash Out KES</span>
+            <span className="text-right">Cash Out {currencyCode}</span>
           </div>
 
           <div className="max-h-64 space-y-1.5 overflow-y-auto pr-0.5">
@@ -446,7 +450,7 @@ export function LiveBetsBoard({
                     </div>
 
                     <span className="text-right font-mono text-[11px] font-semibold text-[#cbd5e1] tabular-nums">
-                      {formatKes(bet.amount)}
+                      {formatLocalNumber(bet.amount, country)}
                     </span>
 
                     <div className="flex justify-center">
@@ -481,9 +485,9 @@ export function LiveBetsBoard({
                       }`}
                     >
                       {isWon
-                        ? `+${formatKes(bet.payout)}`
+                        ? `+${formatLocalNumber(bet.payout, country)}`
                         : isFlyingBet
-                        ? formatKes(liveValue)
+                        ? formatLocalNumber(liveValue, country)
                         : bet.status === 'lost'
                         ? '0.00'
                         : 'Pending'}
